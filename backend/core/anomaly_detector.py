@@ -6,7 +6,7 @@ def normalize_amount(amount):
     if amount is None:
         return None
     amount = str(amount)
-    amount = re.sub(r"[^0-9.\-]","", amount)
+    amount = re.sub(r"[^0-9.,-]","", amount)
     amount=amount.replace(",","")
     try:
         value =Decimal(amount)
