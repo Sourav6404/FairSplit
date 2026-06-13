@@ -121,3 +121,26 @@ def detect_negative_amount(expense):
         "message": "Negative amount detected.",
         "action": "Review transaction before import."
     }
+def detect_ambiguous_date(
+    current_date,
+    suggested_date,
+    previous_date,
+    next_date
+):
+    return {
+        "type": "ambiguous_date",
+        "severity": "warning",
+        "message": (f"The date '{current_date}' does not match the "
+    f"surrounding transactions. Based on nearby records, "
+    f"it may have been '{suggested_date}'."),
+        "current_date": current_date,
+        "suggested_date": suggested_date,
+        "previous_date": previous_date,
+        "next_date": next_date,
+        "requires_user_confirmation": True,
+        "user_options": (f"We found a possible date issue.\n"
+    f"Current date: {current_date}\n"
+    f"Suggested date: {suggested_date}\n\n"
+    f"Would you like to use the suggested date, "
+    f"keep the original date, or edit it manually?")
+    }
