@@ -40,3 +40,13 @@ def detect_similar_names(names):
                     "type":"potential_same_person"
                 })
     return possible_matches
+def detect_missing_payer(expense):
+    payer = expense.get("paid_by")
+    if payer is None or str(payer).strip() == "":
+        return {
+        "type":"missing_payer",
+        "severity":"warning",
+        "message": "Payer information is missing",
+        "action" : "Ask user to select a payer or mark as Unknown."
+        }
+    return None
