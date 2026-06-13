@@ -89,3 +89,35 @@ def infer_currency(expenses):
     for currency in currencies:
         currency_count[currency]=currency_count.get(currency,0)+1
     return max(currency_count,key=currency_count.get)
+def detect_negative_amount(expense):
+    amount = expense.get("amount")
+    if amount is None:
+        return None
+    try:
+        amount = float(amount)
+    except Exception:
+        return None
+    if amount >= 0:
+        return None
+    description = str(expense.get("description","")).lower()
+    refund_keywords = [
+        "refund",
+        "cashback",
+        "returned",
+        "return",
+        "reimbursement"
+    ]
+    for keyword in refund_keywords:
+        if keyword in description:
+            return {
+                "type":"refund_detected",
+                "severity":"info",
+                "message": "Negative amount appears to be a refund.",
+                "action": "Convert to refund transaction."
+            }
+    return {
+        "type":"negative_amount",
+        "severity":"warning",
+        "message": "Negative amount detected.",
+        "action": "Review transaction before import."
+    }
