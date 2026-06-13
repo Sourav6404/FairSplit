@@ -67,3 +67,25 @@ def detect_settlement(expense):
                 "action": "Convert to settlement transaction."
             }
     return None
+def detect_missing_currency(expense):
+    currency = expense.get("currency")
+    if currency is None or str(currency).strip() == "":
+        return {
+            "type":"missing_currency",
+            "severity":"warning",
+            "message": "Currency information is missing",
+            "action": "Infer currency from surrounding records or ask user for confirmation."
+        }
+    return None
+def infer_currency(expenses):
+    currencies =[]
+    for expense in expenses:
+        currency = expense.get("currency")
+        if currency is not None and str(currency).strip() != "":
+            currencies.append(str(currency).strip().upper())
+    if not currencies:
+        return None
+    currency_count ={}
+    for currency in currencies:
+        currency_count[currency]=currency_count.get(currency,0)+1
+    return max(currency_count,key=currency_count.get)
