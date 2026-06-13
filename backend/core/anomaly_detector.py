@@ -144,3 +144,40 @@ def detect_ambiguous_date(
     f"Would you like to use the suggested date, "
     f"keep the original date, or edit it manually?")
     }
+from datetime import datetime
+def detect_invalid_data_format(expense):
+    data_value = str(expense.get("data","")).strip()
+    accepted_formats = [
+        "%d-%m-%Y",
+        "%d/%m/%Y",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d %b %Y",
+        "%d %B %Y",
+        "%b %d %Y",
+        "%B %d %Y",
+        "%B %d, %Y"
+    ]
+    for fmt in accepted_formats:
+        try:
+            parsed_data = datetime.strptime(data_value, fmt)
+            standardized_data =parsed_data.strftime("%d-%m-%Y")
+            if standardized_data != data_value:
+                return {
+                    "type":"invalid_data_format",
+                    "severity":"info",
+                    "original_data": data_value,
+                    "converted_data": standardized_data,
+                    "message":(f"Data format converted from" f"'{data_value}' to '{standardized_data}'."),
+                    "action": "Use standardized date format."
+                }
+            return None
+        except ValueError:
+            continue
+    return {
+        "type":"invalid_data_format",
+        "severity":"warning",
+        "original_data": data_value,
+        "message": "date format is invalid or unrecognized.",
+        "action": "Ask user to enter a valid date."
+    }
