@@ -23,4 +23,20 @@ def normalize_name(name):
         return None
     return " ".join(name.strip().title().split())
 def detect_similar_names(names):
-    pass
+    possible_matches =[]
+    normalized = list(set(normalize_name(name) for name in names))
+    for i in range(len(normalized)):
+        for j in range(i +1,len(normalized)):
+            first =normalized[i]
+            second =normalized[j]
+            first_parts =first.split()
+            second_parts = second.split()
+            if not first_parts or not second_parts:
+                continue
+            if first_parts[0] == second_parts[0] and first != second:
+                possible_matches.append({
+                    "name_1": first,
+                    "name_2":second,
+                    "type":"potential_same_person"
+                })
+    return possible_matches
