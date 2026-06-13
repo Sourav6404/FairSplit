@@ -17,3 +17,10 @@ def normalize_amount(amount):
         return value
     except Exception:
         return None
+
+def normalize_name(name):
+    if name is None:
+        return None
+    return " ".join(name.strip().title().split())
+def detect_similar_names(names):
+    pass
