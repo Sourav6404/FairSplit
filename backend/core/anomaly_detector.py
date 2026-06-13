@@ -50,3 +50,20 @@ def detect_missing_payer(expense):
         "action" : "Ask user to select a payer or mark as Unknown."
         }
     return None
+def detect_settlement(expense):
+    description = str(expense.get("description","")).lower()
+    settlement_keywords = [
+        "paid back",
+        "repaid",
+        "settled",
+        "gave back"
+    ]
+    for keyword in settlement_keywords:
+        if keyword in description:
+            return {
+                "type":"settlement_detected",
+                "severity":"warning",
+                "message": "This transaction appears to be a settlement rather than an expense.",
+                "action": "Convert to settlement transaction."
+            }
+    return None
