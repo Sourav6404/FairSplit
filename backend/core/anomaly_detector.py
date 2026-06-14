@@ -212,3 +212,46 @@ def detect_member_left_group(expense,member_history):
             ]
         }
     return None
+def detect_member_join_violation(expense, member_history):
+    expense_date = datetime.strptime(
+        expense["date"],
+        "%d-%m-%Y"
+    )
+
+    invalid_members = []
+
+    for participant in expense.get("participants", []):
+        member = member_history.get(participant)
+
+        if not member:
+            continue
+
+        join_date = member.get("join_date")
+
+        if join_date:
+            join_date = datetime.strptime(
+                join_date,
+                "%d-%m-%Y"
+            )
+
+            if expense_date < join_date:
+                invalid_members.append(participant)
+
+    if invalid_members:
+        return {
+            "type": "member_join_violation",
+            "severity": "warning",
+            "members": invalid_members,
+            "message": (
+                f"Members appear before their join date: "
+                f"{', '.join(invalid_members)}"
+            ),
+            "requires_user_confirmation": True,
+            "user_options": [
+                "Remove Member From Expense",
+                "Keep Member In Expense",
+                "Edit Join Date"
+            ]
+        }
+
+    return None
