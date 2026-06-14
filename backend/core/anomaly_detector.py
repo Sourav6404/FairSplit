@@ -255,3 +255,148 @@ def detect_member_join_violation(expense, member_history):
         }
 
     return None
+def detect_unknown_guests(expense, group_members):
+    guests = []
+
+    member_set = {
+        member.strip().lower()
+        for member in group_members
+    }
+
+    for participant in expense.get("participants", []):
+        if participant.strip().lower() not in member_set:
+            guests.append(participant)
+
+    if guests:
+        return {
+            "type": "unknown_guest",
+            "severity": "info",
+            "guests": guests,
+            "message": (
+                f"Unknown participants detected: "
+                f"{', '.join(guests)}"
+            ),
+            "requires_user_confirmation": True,
+            "user_options": [
+                "Create Guest Participant",
+                "Convert To Permanent Member",
+                "Remove Participant"
+            ]
+        }
+
+    return None
+def detect_invalid_percentage_split(expense):
+    split_details = expense.get("split_details", {})
+
+    total_percentage = 0
+
+    for percentage in split_details.values():
+        try:
+            total_percentage += float(percentage)
+        except (ValueError, TypeError):
+            return {
+                "type": "invalid_percentage_split",
+                "severity": "warning",
+                "message": "One or more percentage values are invalid.",
+                "requires_user_confirmation": True,
+                "user_options": [
+                    "Edit Percentages",
+                    "Cancel Import"
+                ]
+            }
+
+    if abs(total_percentage - 100) > 0.01:
+        return {
+            "type": "invalid_percentage_split",
+            "severity": "warning",
+            "total_percentage": total_percentage,
+            "difference": round(100 - total_percentage, 2),
+            "message": (
+                f"Percentage split totals {total_percentage}% "
+                f"instead of 100%."
+            ),
+            "requires_user_confirmation": True,
+            "user_options": [
+                "Edit Percentages",
+                "Auto Distribute Difference",
+                "Cancel Import"
+            ]
+        }
+
+    return None
+def detect_split_type_conflict(expense):
+    split_type = str(
+        expense.get("split_type", "")
+    ).strip().lower()
+
+    split_details = expense.get(
+        "split_details",
+        {}
+    )
+
+    amount = float(
+        expense.get("amount", 0)
+    )
+
+    if split_type == "custom":
+        split_total = 0
+
+        for value in split_details.values():
+            try:
+                split_total += float(value)
+            except (ValueError, TypeError):
+                continue
+
+        if abs(split_total - amount) > 0.01:
+            return {
+                "type": "split_type_conflict",
+                "severity": "warning",
+                "expense_amount": amount,
+                "split_total": split_total,
+                "difference": round(
+                    amount - split_total,
+                    2
+                ),
+                "message": (
+                    "Custom split does not "
+                    "match expense amount."
+                ),
+                "requires_user_confirmation": True,
+                "user_options": [
+                    "Edit Split",
+                    "Auto Adjust",
+                    "Cancel Import"
+                ]
+            }
+
+    elif split_type == "percentage":
+        percentage_total = 0
+
+        for value in split_details.values():
+            try:
+                percentage_total += float(value)
+            except (ValueError, TypeError):
+                continue
+
+        if abs(percentage_total - 100) > 0.01:
+            return {
+                "type": "split_type_conflict",
+                "severity": "warning",
+                "percentage_total": percentage_total,
+                "difference": round(
+                    100 - percentage_total,
+                    2
+                ),
+                "message": (
+                    "Percentage split does "
+                    "not total 100%."
+                ),
+                "requires_user_confirmation": True,
+                "user_options": [
+                    "Edit Split",
+                    "Auto Adjust",
+                    "Cancel Import"
+                ]
+            }
+
+    return None
