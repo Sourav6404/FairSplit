@@ -11,6 +11,7 @@ from anomaly_detector import (
     detect_conflicting_expense
 )
 from anomaly_resolver import AnomalyResolver
+from report_generator import ReportGenerator
 class CSVImporter:
     def __init__(self):
         self.resolver = AnomalyResolver()
@@ -83,3 +84,8 @@ class CSVImporter:
             "summary": summary,
             "anomalies": all_anomalies
         }
+    def import_and_generate_report(self,expenses,group_members=None):
+        import_result =self.import_expenses(expenses,group_members)
+        report_generator =ReportGenerator()
+        report = report_generator.generate_report(import_result)
+        return report
