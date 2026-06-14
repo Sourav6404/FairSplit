@@ -181,7 +181,6 @@ def detect_invalid_data_format(expense):
         "message": "date format is invalid or unrecognized.",
         "action": "Ask user to enter a valid date."
     }
-from datatime import datatime
 def detect_member_left_group(expense,member_history):
     expense_data = datetime.strptime(
         expense["date"], "%d-%m-%Y"
