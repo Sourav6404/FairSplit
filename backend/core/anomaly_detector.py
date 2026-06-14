@@ -181,3 +181,35 @@ def detect_invalid_data_format(expense):
         "message": "date format is invalid or unrecognized.",
         "action": "Ask user to enter a valid date."
     }
+from datatime import datatime
+def detect_member_left_group(expense,member_history):
+    expense_data = datetime.strptime(
+        expense["date"], "%d-%m-%Y"
+    )
+    inactive_members =[]
+    for participant in expense.get("participants",[]):
+        member = member_history.get(participant)
+        if not member:
+            continue
+        leave_date = member.get("leave_date")
+        if leave_date:
+            leave_date = datetime.strptime(leave_date, "%d-%m-%Y")
+            if expense_data > leave_date:
+                inactive_members.append(participant)
+    if inactive_members:
+        return{
+            "type": "member_left_group",
+            "severity": "warning",
+            "inactive_members": inactive_members,
+            "message":(
+                f"Inactive member found: "
+                f"{', '.join(inactive_members)}. "
+            ),
+            "requires_user_confirmation": True,
+            "user_options":[
+                "remove member from expence",
+                "keep member in expence",
+                "Edit Participants"
+            ]
+        }
+    return None
