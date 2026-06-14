@@ -5,8 +5,10 @@ from anomaly_detector import (
     detect_invalid_date_format,
     detect_split_type_conflict,
     detect_invalid_percentage_split,
-    detect_unknown_guest,
     detect_settlement,
+    detect_unknown_guest,
+    detect_duplicate_expense,
+    detect_conflicting_expense
 )
 from anomaly_resolver import AnomalyResolver
 class CSVImporter:
@@ -28,10 +30,10 @@ class CSVImporter:
             duplicate = detect_duplicate_expense(expense,previous_expenses)
             if duplicate:
                 resolution = self.resolver.resolve(duplicate)
-        all_anomalies.append({
-        "expense": expense,
-        "anomaly": duplicate,
-        "resolution": resolution
+                all_anomalies.append({
+                         "expense": expense,
+                        "anomaly": duplicate,
+                         "resolution": resolution
         })
         conflict = detect_conflicting_expense(expense,previous_expenses)
 
