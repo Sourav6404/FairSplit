@@ -20,7 +20,7 @@ def normalize_amount(amount):
 
 def normalize_name(name):
     if name is None:
-        return None
+        return ""
     name = str(name)
     return " ".join(name.strip().title().split())
 def detect_similar_names(names):
@@ -38,7 +38,7 @@ def detect_similar_names(names):
                 possible_matches.append({
                     "id": "ANOMALY_SIMILAR_NAME",
                     "type": "potential_same_person",
-                    "severity": "warning",
+                    "severity": "info",
                      "name_1": first,
                     "name_2": second
                 })
@@ -175,9 +175,13 @@ def detect_invalid_date_format(expense):
         "original_date": date_value
     }
 def detect_member_left_group(expense,member_history):
-    expense_data = datetime.strptime(
-        expense["date"], "%d-%m-%Y"
+    try:
+        expense_date = datetime.strptime(
+        expense["date"],
+        "%d-%m-%Y"
     )
+    except ValueError:
+        return None
     inactive_members =[]
     for participant in expense.get("participants",[]):
         member = member_history.get(participant)
@@ -186,7 +190,7 @@ def detect_member_left_group(expense,member_history):
         leave_date = member.get("leave_date")
         if leave_date:
             leave_date = datetime.strptime(leave_date, "%d-%m-%Y")
-            if expense_data > leave_date:
+            if expense_date > leave_date:
                 inactive_members.append(participant)
     if inactive_members:
         return{
@@ -198,10 +202,13 @@ def detect_member_left_group(expense,member_history):
         }
     return None
 def detect_member_join_violation(expense, member_history):
-    expense_date = datetime.strptime(
-        expense["date"],
-        "%d-%m-%Y"
-    )
+    try:
+        expense_date = datetime.strptime(
+            expense["date"],
+            "%d-%m-%Y"
+        )
+    except ValueError:
+        return None
     invalid_members = []
     for participant in expense.get("participants", []):
         member = member_history.get(participant)
@@ -252,7 +259,7 @@ def detect_invalid_percentage_split(expense):
             return {
                 "id": "ANOMALY_INVALID_PERCENTAGE_SPLIT",
                 "type": "invalid_percentage_split",
-                "severity": "warning",
+                "severity": "critical",
                 "total_percentage": total_percentage,
                 "difference":round(100 - total_percentage, 2),
                 "expense": expense,
@@ -261,7 +268,7 @@ def detect_invalid_percentage_split(expense):
         return {
             "id": "ANOMALY_INVALID_PERCENTAGE_SPLIT",
             "type": "invalid_percentage_split",
-            "severity": "warning",
+            "severity": "critical",
             "total_percentage": total_percentage,
             "difference": round(100 - total_percentage, 2),
             "expense": expense,
@@ -289,7 +296,7 @@ def detect_split_type_conflict(expense):
             return {
                 "id": "ANOMALY_SPLIT_TYPE_CONFLICT",
                 "type": "split_type_conflict",
-                "severity": "warning",
+                "severity": "critical",
                 "expense_amount": amount,
                 "split_total": split_total,
                 "difference": round( amount - split_total,2),
@@ -306,7 +313,7 @@ def detect_split_type_conflict(expense):
             return {
                 "id": "ANOMALY_SPLIT_TYPE_CONFLICT",
                 "type": "split_type_conflict",
-                "severity": "warning",
+                "severity": "critical",
                 "percentage_total": percentage_total,
                 "difference": round( 100 - percentage_total, 2 ),
                 "expense": expense
@@ -342,7 +349,7 @@ def detect_duplicate_expense(expense, previous_expenses):
             return {
                 "id": "ANOMALY_DUPLICATE_EXPENSE",
                 "type": "duplicate_expense",
-                "severity": "warning",
+                "severity": "critical",
                 "expense": expense,
                 "duplicate_of": previous
             }
@@ -424,7 +431,7 @@ def detect_conflicting_expense(
             return {
                 "id": "ANOMALY_CONFLICTING_EXPENSE",
                 "type": "conflicting_expense",
-                "severity": "warning",
+                "severity": "critical",
                 "expense": expense,
                 "conflicting_with": previous
             }
