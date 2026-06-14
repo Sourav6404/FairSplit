@@ -4,7 +4,10 @@ from .views import (
     GroupViewSet,
     MemberViewSet,
     ExpenseViewSet,
-    SettlementViewSet
+    ExpenseParticipantViewSet,
+    SettlementViewSet,
+    ImportSessionViewSet,
+    ImportAnomalyViewSet
 )
 
 router = DefaultRouter()
@@ -25,8 +28,21 @@ router.register(
 )
 
 router.register(
+    "expense-participants",
+    ExpenseParticipantViewSet
+)
+
+router.register(
     "settlements",
     SettlementViewSet
+)
+router.register(
+    "imports",
+    ImportSessionViewSet
+)
+router.register(
+    "anomalies",
+    ImportAnomalyViewSet
 )
 
 urlpatterns = router.urls

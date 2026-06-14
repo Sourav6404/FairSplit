@@ -1,11 +1,12 @@
 from rest_framework import serializers
-
 from .models import (
     Group,
     Member,
     Expense,
     ExpenseParticipant,
-    Settlement
+    Settlement,
+    ImportSession,
+    ImportAnomaly
 )
 class GroupSerializer(serializers.ModelSerializer):
 
@@ -44,4 +45,20 @@ class SettlementSerializer(
 
     class Meta:
         model = Settlement
+        fields = "__all__"
+class ImportSessionSerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+        model = ImportSession
+        fields = "__all__"
+
+
+class ImportAnomalySerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+        model = ImportAnomaly
         fields = "__all__"

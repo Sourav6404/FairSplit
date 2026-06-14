@@ -1,4 +1,5 @@
 from django.contrib import admin
+from core.views import DashboardViewSet
 from django.urls import (
     path,
     include
@@ -15,4 +16,14 @@ urlpatterns = [
         "api/",
         include("core.urls")
     ),
+    path(
+    "api/auth/",
+    include(
+        "core.auth_urls"
+    )
+),
+path(
+    "api/dashboard/",
+    DashboardViewSet.as_view()
+),
 ]
