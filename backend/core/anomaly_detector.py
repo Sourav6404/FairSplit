@@ -47,7 +47,7 @@ def detect_missing_payer(expense):
     payer = expense.get("paid_by")
     if payer is None or str(payer).strip() == "":
         return {
-        "id": "DETECT_MISSING_PAYER",
+        "id": "ANOMALY_MISSING_PAYER",
         "type":"missing_payer",
         "severity":"warning",
         "expense":expense
@@ -64,7 +64,7 @@ def detect_settlement(expense):
     for keyword in settlement_keywords:
         if keyword in description:
             return {
-                "id": "DETECT_SETTLEMENT",
+                "id": "ANOMALY_SETTLEMENT",
                 "type":"settlement_detected",
                 "severity":"warning",
                 "expense":expense
@@ -74,7 +74,7 @@ def detect_missing_currency(expense):
     currency = expense.get("currency")
     if currency is None or str(currency).strip() == "":
         return {
-            "id": "DETECT_MISSING_CURRENCY",
+            "id": "ANOMALY_MISSING_CURRENCY",
             "type":"missing_currency",
             "severity":"warning",
             "expense":expense
@@ -113,13 +113,13 @@ def detect_negative_amount(expense):
     for keyword in refund_keywords:
         if keyword in description:
             return {
-                "id": "DETECT_REFUND",
+                "id": "ANOMALY_REFUND",
                 "type":"refund_detected",
                 "severity":"info",
                 "expense":expense
             }
     return {
-        "id": "DETECT_NEGATIVE_AMOUNT",
+        "id": "ANOMALY_NEGATIVE_AMOUNT",
         "type":"negative_amount",
         "severity":"warning",
         "expense":expense
@@ -131,7 +131,7 @@ def detect_ambiguous_date(
     next_date
 ):
     return {
-        "id": "DETECT_AMBIGUOUS_DATE",
+        "id": "ANOMALY_AMBIGUOUS_DATE",
         "type": "ambiguous_date",
         "severity": "warning",
         "current_date": current_date,
@@ -159,20 +159,20 @@ def detect_invalid_date_format(expense):
             standardized_date =parsed_date.strftime("%d-%m-%Y")
             if standardized_date != date_value:
                 return {
-                    "id": "DETECT_INVALID_DATE_FORMAT",
+                    "id": "ANOMALY_INVALID_DATE_FORMAT",
                     "type":"invalid_date_format",
                     "severity":"info",
-                    "original_data": date_value,
-                    "converted_data": standardized_date
+                    "converted_date": standardized_date,
+                    "original_date": date_value
                 }
             return None
         except ValueError:
             continue
     return {
-        "id": "DETECT_INVALID_DATE_FORMAT",
+        "id": "ANOMALY_INVALID_DATE_FORMAT",
         "type":"invalid_date_format",
         "severity":"warning",
-        "original_data": date_value
+        "original_date": date_value
     }
 def detect_member_left_group(expense,member_history):
     expense_data = datetime.strptime(
@@ -190,7 +190,7 @@ def detect_member_left_group(expense,member_history):
                 inactive_members.append(participant)
     if inactive_members:
         return{
-            "id": "DETECT_MEMBER_LEFT_GROUP",
+            "id": "ANOMALY_MEMBER_LEFT_GROUP",
             "type": "member_left_group",
             "severity": "warning",
             "inactive_members": inactive_members,
@@ -217,14 +217,14 @@ def detect_member_join_violation(expense, member_history):
                 invalid_members.append(participant)
     if invalid_members:
         return {
-            "id": "DETECT_MEMBER_JOIN_VIOLATION",
+            "id": "ANOMALY_MEMBER_JOIN_VIOLATION",
             "type": "member_join_violation",
             "severity": "warning",
             "members": invalid_members,
             "expense": expense
         }
     return None
-def detect_unknown_guests(expense, group_members):
+def detect_unknown_guest(expense, group_members):
     guests = []
     member_set = {
         member.strip().lower()
@@ -235,7 +235,7 @@ def detect_unknown_guests(expense, group_members):
             guests.append(participant)
     if guests:
         return {
-            "id": "DETECT_UNKNOWN_GUESTS",
+            "id": "ANOMALY_UNKNOWN_GUEST",
             "type": "unknown_guest",
             "severity": "info",
             "guests": guests,
@@ -250,7 +250,7 @@ def detect_invalid_percentage_split(expense):
             total_percentage += float(percentage)
         except (ValueError, TypeError):
             return {
-                "id": "DETECT_INVALID_PERCENTAGE_SPLIT",
+                "id": "ANOMALY_INVALID_PERCENTAGE_SPLIT",
                 "type": "invalid_percentage_split",
                 "severity": "warning",
                 "total_percentage": total_percentage,
@@ -259,7 +259,7 @@ def detect_invalid_percentage_split(expense):
             }
     if abs(total_percentage - 100) > 0.01:
         return {
-            "id": "DETECT_INVALID_PERCENTAGE_SPLIT",
+            "id": "ANOMALY_INVALID_PERCENTAGE_SPLIT",
             "type": "invalid_percentage_split",
             "severity": "warning",
             "total_percentage": total_percentage,
@@ -287,7 +287,7 @@ def detect_split_type_conflict(expense):
                 continue
         if abs(split_total - amount) > 0.01:
             return {
-                "id": "DETECT_SPLIT_TYPE_CONFLICT",
+                "id": "ANOMALY_SPLIT_TYPE_CONFLICT",
                 "type": "split_type_conflict",
                 "severity": "warning",
                 "expense_amount": amount,
@@ -304,7 +304,7 @@ def detect_split_type_conflict(expense):
                 continue
         if abs(percentage_total - 100) > 0.01:
             return {
-                "id": "DETECT_SPLIT_TYPE_CONFLICT",
+                "id": "ANOMALY_SPLIT_TYPE_CONFLICT",
                 "type": "split_type_conflict",
                 "severity": "warning",
                 "percentage_total": percentage_total,
