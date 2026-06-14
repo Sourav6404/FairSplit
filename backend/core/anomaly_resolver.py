@@ -31,6 +31,8 @@ class AnomalyResolver:
             return self.resolve_split_type_conflict(anomaly)
         elif anomaly_id == "ANOMALY_SETTLEMENT":
             return self.resolve_settlement(anomaly)
+        elif anomaly_id == "ANOMALY_MULTIPLE_CURRENCIES":
+            return self.resolve_multiple_currencies(anomaly)
         return {
             "anomaly_id": anomaly.get("id", "UNKNOWN"),
             "title": "Unknown Anomaly",
@@ -284,3 +286,44 @@ class AnomalyResolver:
             "Edit Manually"
         ]
     }
+    def resolve_multiple_currencies(
+    self,
+    anomaly
+):
+
+        return {
+            "anomaly_id":
+                anomaly["id"],
+
+            "title":
+                "Multiple currencies detected",
+
+            "message":
+                (
+                    "Expenses use "
+                    "multiple currencies."
+                ),
+
+            "suggestion":
+                (
+                    "Convert all "
+                    "expenses into "
+                    f'{anomaly["major_currency"]}'
+                ),
+
+            "requires_confirmation":
+                True,
+
+            "options":
+            [
+                {
+                    "action":
+                        "convert_to_majority_currency",
+
+                    "currency":
+                        anomaly[
+                            "major_currency"
+                        ]
+                }
+            ]
+        }

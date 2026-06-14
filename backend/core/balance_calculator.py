@@ -9,12 +9,21 @@ from .models import (
 class BalanceCalculator:
     def __init__(self, group):
         self.group = group
+    def get_expense_amount(self, expense):
+            return (
+                expense.converted_amount
+                if expense.converted_amount is not None
+                else expense.amount
+    )
     def calculate_paid_amount(self):
         paid = {}
         expenses = Expense.objects.filter(group=self.group)
         for expense in expenses:
             member = expense.paid_by
-            paid[member.id] = (paid.get(member.id, Decimal("0"))+ expense.amount)
+            expense_amount = self.get_expense_amount(
+    expense
+)
+            paid[member.id] = (paid.get(member.id, Decimal("0"))+ expense_amount)
         return paid
     def calculate_share_amount(self):
         shares = {}
@@ -88,7 +97,7 @@ class BalanceCalculator:
                 payer=payer,
                 receiver=receiver,
                 amount=settlement["amount"],
-                currency="INR",
+                currency=self.group.default_currency,
                 settlement_date=date.today()
             )
         return settlements

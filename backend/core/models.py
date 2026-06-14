@@ -18,24 +18,6 @@ class Member(models.Model):
     is_guest = models.BooleanField(default=False)
     def __str__(self):
         return self.name 
-class Expense(models.Model):
-    group = models.ForeignKey(Group,on_delete=models.CASCADE,related_name="expenses")
-    description = models.CharField(max_length=255)
-    amount = models.DecimalField(max_digits=12,decimal_places=2)
-    currency = models.CharField(max_length=10,default="INR")
-    paid_by = models.ForeignKey(Member,on_delete=models.CASCADE,related_name="paid_expenses")
-    date = models.DateField()
-    notes = models.TextField(blank=True,null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    def __str__(self):
-        return self.description
-class ExpenseParticipant(models.Model):
-    expense = models.ForeignKey(Expense,on_delete=models.CASCADE,related_name="participants")
-    member = models.ForeignKey(Member,on_delete=models.CASCADE)
-    share_amount = models.DecimalField(max_digits=12,decimal_places=2,null=True,blank=True)
-    share_percentage = models.DecimalField(max_digits=5,decimal_places=2,null=True,blank=True)
-    def __str__(self):
-        return (f"{self.member.name} - "f"{self.expense.description}")
 class Settlement(models.Model):
     group = models.ForeignKey(Group,on_delete=models.CASCADE,related_name="settlements")
     payer = models.ForeignKey(Member,on_delete=models.CASCADE,related_name="settlements_paid")
@@ -77,3 +59,101 @@ class AnomalyDecision(models.Model):
     original_value = models.JSONField(null=True,blank=True)
     final_value = models.JSONField(null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+class Expense(models.Model):
+    original_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    original_currency = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True
+    )
+
+    base_currency = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True
+    )
+
+    exchange_rate = models.DecimalField(
+        max_digits=15,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
+
+    converted_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE
+    )
+
+    paid_by = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE
+    )
+
+    description = models.CharField(
+        max_length=255
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+
+    currency = models.CharField(
+        max_length=10,
+        default="INR"
+    )
+
+    expense_date = models.DateField()
+
+    split_type = models.CharField(
+    max_length=20,
+    choices=[
+        ("equal", "Equal"),
+        ("percentage", "Percentage"),
+        ("exact", "Exact")
+    ],
+    default="equal"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+class ExpenseParticipant(models.Model):
+
+    expense = models.ForeignKey(
+        Expense,
+        on_delete=models.CASCADE,
+        related_name="participants"
+    )
+
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE
+    )
+
+    share_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )

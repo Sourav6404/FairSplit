@@ -1,4 +1,4 @@
-from anomaly_detector import (
+from .anomaly_detector import (
     detect_missing_payer,
     detect_missing_currency,
     detect_negative_amount,
@@ -8,10 +8,12 @@ from anomaly_detector import (
     detect_settlement,
     detect_unknown_guest,
     detect_duplicate_expense,
-    detect_conflicting_expense
+    detect_conflicting_expense,
+    detect_multiple_currencies
 )
-from anomaly_resolver import AnomalyResolver
-from report_generator import ReportGenerator
+from .anomaly_resolver import AnomalyResolver
+from .report_generator import ReportGenerator
+from .currency_converter import CurrencyConverter
 class CSVImporter:
     def __init__(self):
         self.resolver = AnomalyResolver()
@@ -27,6 +29,70 @@ class CSVImporter:
     def import_expenses(self,expenses,group_members=None):
         all_anomalies = []
         previous_expenses = []
+        currency_anomaly = (
+    detect_multiple_currencies(
+        expenses
+    )
+)
+        converter = CurrencyConverter()
+
+        if currency_anomaly:
+
+            major_currency = (
+                currency_anomaly[
+                    "major_currency"
+                ]
+            )
+
+            for expense in expenses:
+
+                current_currency = (
+                    str(
+                        expense.get(
+                            "currency",
+                            ""
+                        )
+                    )
+                    .strip()
+                    .upper()
+                )
+
+                if (
+                    current_currency
+                    and
+                    current_currency
+                    !=
+                    major_currency
+                ):
+
+                    conversion = (
+                        converter.convert(
+                            amount=expense["amount"],
+                            from_currency=current_currency,
+                            to_currency=major_currency,
+                            date=expense["date"]
+                        )
+                    )
+
+                    expense["original_amount"] = (
+                        expense["amount"]
+                    )
+
+                    expense["original_currency"] = (
+                        current_currency
+                    )
+
+                    expense["converted_amount"] = str(
+                        conversion["converted_amount"]
+                    )
+
+                    expense["exchange_rate"] = str(
+                        conversion["exchange_rate"]
+                    )
+
+                    expense["base_currency"] = (
+                        major_currency
+                    )
         for expense in expenses:
             duplicate = detect_duplicate_expense(expense,previous_expenses)
             if duplicate:
@@ -36,15 +102,15 @@ class CSVImporter:
                         "anomaly": duplicate,
                          "resolution": resolution
         })
-        conflict = detect_conflicting_expense(expense,previous_expenses)
+            conflict = detect_conflicting_expense(expense,previous_expenses)
 
-        if conflict:
-            resolution = self.resolver.resolve(conflict)
-            all_anomalies.append({
-                "expense": expense,
-                "anomaly": conflict,
-                "resolution": resolution
-    })
+            if conflict:
+                resolution = self.resolver.resolve(conflict)
+                all_anomalies.append({
+                    "expense": expense,
+                    "anomaly": conflict,
+                    "resolution": resolution
+        })
             for detector in self.detectors:
                 anomaly = detector(expense)
                 if anomaly:
@@ -69,7 +135,7 @@ class CSVImporter:
                             "resolution": resolution
                         }
                     )
-        previous_expenses.append(expense)
+            previous_expenses.append(expense)
         total_expenses = len(expenses)
         total_anomalies = len(all_anomalies)
         anomaly_percentage = 0

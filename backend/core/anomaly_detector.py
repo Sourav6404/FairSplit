@@ -436,3 +436,62 @@ def detect_conflicting_expense(
                 "conflicting_with": previous
             }
     return None
+def detect_multiple_currencies(expenses):
+    currencies = {}
+    max_count = max(
+    currencies.values()
+)
+
+    major_currencies = [
+        currency
+        for currency, count
+        in currencies.items()
+        if count == max_count
+    ]
+    for expense in expenses:
+        currency = (
+            str(
+                expense.get(
+                    "currency",
+                    ""
+                )
+            )
+            .strip()
+            .upper()
+        )
+        if not currency:
+            continue
+        currencies[currency] = (
+            currencies.get(
+                currency,
+                0
+            )
+            + 1
+        )
+    if len(currencies) <= 1:
+        return None
+    majority_currency = max(
+        currencies,
+        key=currencies.get
+    )
+    minority_currencies = [
+        c
+        for c in currencies
+        if c != majority_currency
+    ]
+    return {
+    "id":
+        "ANOMALY_MULTIPLE_CURRENCIES",
+
+    "type":
+        "multiple_currencies",
+
+    "severity":
+        "warning",
+
+    "major_currency":
+        majority_currency,
+
+    "minor_currencies":
+        minority_currencies
+}
