@@ -21,6 +21,7 @@ def normalize_amount(amount):
 def normalize_name(name):
     if name is None:
         return None
+    name = str(name)
     return " ".join(name.strip().title().split())
 def detect_similar_names(names):
     possible_matches =[]
@@ -35,19 +36,21 @@ def detect_similar_names(names):
                 continue
             if first_parts[0] == second_parts[0] and first != second:
                 possible_matches.append({
-                    "name_1": first,
-                    "name_2":second,
-                    "type":"potential_same_person"
+                    "id": "ANOMALY_SIMILAR_NAME",
+                    "type": "potential_same_person",
+                    "severity": "warning",
+                     "name_1": first,
+                    "name_2": second
                 })
     return possible_matches
 def detect_missing_payer(expense):
     payer = expense.get("paid_by")
     if payer is None or str(payer).strip() == "":
         return {
+        "id": "DETECT_MISSING_PAYER",
         "type":"missing_payer",
         "severity":"warning",
-        "message": "Payer information is missing",
-        "action" : "Ask user to select a payer or mark as Unknown."
+        "expense":expense
         }
     return None
 def detect_settlement(expense):
@@ -61,20 +64,20 @@ def detect_settlement(expense):
     for keyword in settlement_keywords:
         if keyword in description:
             return {
+                "id": "DETECT_SETTLEMENT",
                 "type":"settlement_detected",
                 "severity":"warning",
-                "message": "This transaction appears to be a settlement rather than an expense.",
-                "action": "Convert to settlement transaction."
+                "expense":expense
             }
     return None
 def detect_missing_currency(expense):
     currency = expense.get("currency")
     if currency is None or str(currency).strip() == "":
         return {
+            "id": "DETECT_MISSING_CURRENCY",
             "type":"missing_currency",
             "severity":"warning",
-            "message": "Currency information is missing",
-            "action": "Infer currency from surrounding records or ask user for confirmation."
+            "expense":expense
         }
     return None
 def infer_currency(expenses):
@@ -110,16 +113,16 @@ def detect_negative_amount(expense):
     for keyword in refund_keywords:
         if keyword in description:
             return {
+                "id": "DETECT_REFUND",
                 "type":"refund_detected",
                 "severity":"info",
-                "message": "Negative amount appears to be a refund.",
-                "action": "Convert to refund transaction."
+                "expense":expense
             }
     return {
+        "id": "DETECT_NEGATIVE_AMOUNT",
         "type":"negative_amount",
         "severity":"warning",
-        "message": "Negative amount detected.",
-        "action": "Review transaction before import."
+        "expense":expense
     }
 def detect_ambiguous_date(
     current_date,
@@ -128,25 +131,17 @@ def detect_ambiguous_date(
     next_date
 ):
     return {
+        "id": "DETECT_AMBIGUOUS_DATE",
         "type": "ambiguous_date",
         "severity": "warning",
-        "message": (f"The date '{current_date}' does not match the "
-    f"surrounding transactions. Based on nearby records, "
-    f"it may have been '{suggested_date}'."),
         "current_date": current_date,
         "suggested_date": suggested_date,
         "previous_date": previous_date,
-        "next_date": next_date,
-        "requires_user_confirmation": True,
-        "user_options": (f"We found a possible date issue.\n"
-    f"Current date: {current_date}\n"
-    f"Suggested date: {suggested_date}\n\n"
-    f"Would you like to use the suggested date, "
-    f"keep the original date, or edit it manually?")
+        "next_date": next_date
     }
 from datetime import datetime
-def detect_invalid_data_format(expense):
-    data_value = str(expense.get("data","")).strip()
+def detect_invalid_date_format(expense):
+    date_value = str(expense.get("date","")).strip()
     accepted_formats = [
         "%d-%m-%Y",
         "%d/%m/%Y",
@@ -160,26 +155,24 @@ def detect_invalid_data_format(expense):
     ]
     for fmt in accepted_formats:
         try:
-            parsed_data = datetime.strptime(data_value, fmt)
-            standardized_data =parsed_data.strftime("%d-%m-%Y")
-            if standardized_data != data_value:
+            parsed_date = datetime.strptime(date_value, fmt)
+            standardized_date =parsed_date.strftime("%d-%m-%Y")
+            if standardized_date != date_value:
                 return {
-                    "type":"invalid_data_format",
+                    "id": "DETECT_INVALID_DATE_FORMAT",
+                    "type":"invalid_date_format",
                     "severity":"info",
-                    "original_data": data_value,
-                    "converted_data": standardized_data,
-                    "message":(f"Data format converted from" f"'{data_value}' to '{standardized_data}'."),
-                    "action": "Use standardized date format."
+                    "original_data": date_value,
+                    "converted_data": standardized_date
                 }
             return None
         except ValueError:
             continue
     return {
-        "type":"invalid_data_format",
+        "id": "DETECT_INVALID_DATE_FORMAT",
+        "type":"invalid_date_format",
         "severity":"warning",
-        "original_data": data_value,
-        "message": "date format is invalid or unrecognized.",
-        "action": "Ask user to enter a valid date."
+        "original_data": date_value
     }
 def detect_member_left_group(expense,member_history):
     expense_data = datetime.strptime(
@@ -197,19 +190,11 @@ def detect_member_left_group(expense,member_history):
                 inactive_members.append(participant)
     if inactive_members:
         return{
+            "id": "DETECT_MEMBER_LEFT_GROUP",
             "type": "member_left_group",
             "severity": "warning",
             "inactive_members": inactive_members,
-            "message":(
-                f"Inactive member found: "
-                f"{', '.join(inactive_members)}. "
-            ),
-            "requires_user_confirmation": True,
-            "user_options":[
-                "remove member from expence",
-                "keep member in expence",
-                "Edit Participants"
-            ]
+            "expense": expense
         }
     return None
 def detect_member_join_violation(expense, member_history):
@@ -217,186 +202,230 @@ def detect_member_join_violation(expense, member_history):
         expense["date"],
         "%d-%m-%Y"
     )
-
     invalid_members = []
-
     for participant in expense.get("participants", []):
         member = member_history.get(participant)
-
         if not member:
             continue
-
         join_date = member.get("join_date")
-
         if join_date:
             join_date = datetime.strptime(
                 join_date,
                 "%d-%m-%Y"
             )
-
             if expense_date < join_date:
                 invalid_members.append(participant)
-
     if invalid_members:
         return {
+            "id": "DETECT_MEMBER_JOIN_VIOLATION",
             "type": "member_join_violation",
             "severity": "warning",
             "members": invalid_members,
-            "message": (
-                f"Members appear before their join date: "
-                f"{', '.join(invalid_members)}"
-            ),
-            "requires_user_confirmation": True,
-            "user_options": [
-                "Remove Member From Expense",
-                "Keep Member In Expense",
-                "Edit Join Date"
-            ]
+            "expense": expense
         }
-
     return None
 def detect_unknown_guests(expense, group_members):
     guests = []
-
     member_set = {
         member.strip().lower()
         for member in group_members
     }
-
     for participant in expense.get("participants", []):
         if participant.strip().lower() not in member_set:
             guests.append(participant)
-
     if guests:
         return {
+            "id": "DETECT_UNKNOWN_GUESTS",
             "type": "unknown_guest",
             "severity": "info",
             "guests": guests,
-            "message": (
-                f"Unknown participants detected: "
-                f"{', '.join(guests)}"
-            ),
-            "requires_user_confirmation": True,
-            "user_options": [
-                "Create Guest Participant",
-                "Convert To Permanent Member",
-                "Remove Participant"
-            ]
+            "expense": expense
         }
-
     return None
 def detect_invalid_percentage_split(expense):
     split_details = expense.get("split_details", {})
-
     total_percentage = 0
-
     for percentage in split_details.values():
         try:
             total_percentage += float(percentage)
         except (ValueError, TypeError):
             return {
+                "id": "DETECT_INVALID_PERCENTAGE_SPLIT",
                 "type": "invalid_percentage_split",
                 "severity": "warning",
-                "message": "One or more percentage values are invalid.",
-                "requires_user_confirmation": True,
-                "user_options": [
-                    "Edit Percentages",
-                    "Cancel Import"
-                ]
+                "total_percentage": total_percentage,
+                "difference":round(100 - total_percentage, 2),
+                "expense": expense,
             }
-
     if abs(total_percentage - 100) > 0.01:
         return {
+            "id": "DETECT_INVALID_PERCENTAGE_SPLIT",
             "type": "invalid_percentage_split",
             "severity": "warning",
             "total_percentage": total_percentage,
             "difference": round(100 - total_percentage, 2),
-            "message": (
-                f"Percentage split totals {total_percentage}% "
-                f"instead of 100%."
-            ),
-            "requires_user_confirmation": True,
-            "user_options": [
-                "Edit Percentages",
-                "Auto Distribute Difference",
-                "Cancel Import"
-            ]
+            "expense": expense,
         }
-
     return None
 def detect_split_type_conflict(expense):
     split_type = str(
         expense.get("split_type", "")
     ).strip().lower()
-
     split_details = expense.get(
         "split_details",
         {}
     )
-
     amount = float(
         expense.get("amount", 0)
     )
-
     if split_type == "custom":
         split_total = 0
-
         for value in split_details.values():
             try:
                 split_total += float(value)
             except (ValueError, TypeError):
                 continue
-
         if abs(split_total - amount) > 0.01:
             return {
+                "id": "DETECT_SPLIT_TYPE_CONFLICT",
                 "type": "split_type_conflict",
                 "severity": "warning",
                 "expense_amount": amount,
                 "split_total": split_total,
-                "difference": round(
-                    amount - split_total,
-                    2
-                ),
-                "message": (
-                    "Custom split does not "
-                    "match expense amount."
-                ),
-                "requires_user_confirmation": True,
-                "user_options": [
-                    "Edit Split",
-                    "Auto Adjust",
-                    "Cancel Import"
-                ]
+                "difference": round( amount - split_total,2),
+                "expense": expense
             }
-
     elif split_type == "percentage":
         percentage_total = 0
-
         for value in split_details.values():
             try:
                 percentage_total += float(value)
             except (ValueError, TypeError):
                 continue
-
         if abs(percentage_total - 100) > 0.01:
             return {
+                "id": "DETECT_SPLIT_TYPE_CONFLICT",
                 "type": "split_type_conflict",
                 "severity": "warning",
                 "percentage_total": percentage_total,
-                "difference": round(
-                    100 - percentage_total,
-                    2
-                ),
-                "message": (
-                    "Percentage split does "
-                    "not total 100%."
-                ),
-                "requires_user_confirmation": True,
-                "user_options": [
-                    "Edit Split",
-                    "Auto Adjust",
-                    "Cancel Import"
-                ]
+                "difference": round( 100 - percentage_total, 2 ),
+                "expense": expense
             }
-
+    return None
+def detect_duplicate_expense(expense, previous_expenses):
+    current_key = (
+        expense.get("date"),
+        normalize_amount(expense.get("amount")),
+        normalize_name(expense.get("paid_by")),
+        str(expense.get("description", "")).strip().lower(),
+        tuple(
+            sorted(
+                normalize_name(p)
+                for p in expense.get("participants", [])
+            )
+        )
+    )
+    for previous in previous_expenses:
+        previous_key = (
+            previous.get("date"),
+            normalize_amount(previous.get("amount")),
+            normalize_name(previous.get("paid_by")),
+            str(previous.get("description", "")).strip().lower(),
+            tuple(
+                sorted(
+                    normalize_name(p)
+                    for p in previous.get("participants", [])
+                )
+            )
+        )
+        if current_key == previous_key:
+            return {
+                "id": "ANOMALY_DUPLICATE_EXPENSE",
+                "type": "duplicate_expense",
+                "severity": "warning",
+                "expense": expense,
+                "duplicate_of": previous
+            }
+    return None
+def detect_conflicting_expense(
+    expense,
+    previous_expenses
+):
+    current_date = expense.get("date")
+    current_description = (
+        str(
+            expense.get(
+                "description",
+                ""
+            )
+        )
+        .strip()
+        .lower()
+    )
+    current_participants = tuple(
+        sorted(
+            normalize_name(p)
+            for p in expense.get(
+                "participants",
+                []
+            )
+        )
+    )
+    current_amount = normalize_amount(
+        expense.get("amount")
+    )
+    current_payer = normalize_name(
+        expense.get("paid_by")
+    )
+    for previous in previous_expenses:
+        previous_date = previous.get("date")
+        previous_description = (
+            str(
+                previous.get(
+                    "description",
+                    ""
+                )
+            )
+            .strip()
+            .lower()
+        )
+        previous_participants = tuple(
+            sorted(
+                normalize_name(p)
+                for p in previous.get(
+                    "participants",
+                    []
+                )
+            )
+        )
+        previous_amount = normalize_amount(
+            previous.get("amount")
+        )
+        previous_payer = normalize_name(
+            previous.get("paid_by")
+        )
+        same_expense = (
+            current_date == previous_date
+            and
+            current_description
+            ==
+            previous_description
+            and
+            current_participants
+            ==
+            previous_participants
+        )
+        conflicting_details = (
+            current_amount != previous_amount
+            or
+            current_payer != previous_payer
+        )
+        if same_expense and conflicting_details:
+            return {
+                "id": "ANOMALY_CONFLICTING_EXPENSE",
+                "type": "conflicting_expense",
+                "severity": "warning",
+                "expense": expense,
+                "conflicting_with": previous
+            }
     return None
