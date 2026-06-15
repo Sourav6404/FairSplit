@@ -347,13 +347,25 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                     split_type = exp.get("split_type", "equal")
                     participants_phones = exp.get("participants_phones", [])
 
+                    expense_date_val = exp.get("expense_date", "01-01-2026")
+                    parsed_date = None
+                    for fmt in ["%d-%m-%Y", "%Y-%m-%d"]:
+                        try:
+                            from datetime import datetime
+                            parsed_date = datetime.strptime(str(expense_date_val).strip(), fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                    if parsed_date is None:
+                        parsed_date = expense_date_val
+
                     expense = Expense.objects.create(
                         group=group,
                         paid_by=payer_member,
                         description=exp.get("description", "Imported Expense"),
                         amount=amount,
                         currency=exp.get("currency", "INR"),
-                        expense_date=exp.get("expense_date", "2026-01-01"),
+                        expense_date=parsed_date,
                         split_type=split_type if split_type in ["equal", "percentage", "exact"] else "equal"
                     )
 
@@ -442,13 +454,25 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
             with transaction.atomic():
 
+                expense_date_val = data.get("expense_date", "01-01-2026")
+                parsed_date = None
+                for fmt in ["%d-%m-%Y", "%Y-%m-%d"]:
+                    try:
+                        from datetime import datetime
+                        parsed_date = datetime.strptime(str(expense_date_val).strip(), fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                if parsed_date is None:
+                    parsed_date = expense_date_val
+
                 expense = Expense.objects.create(
                     group_id=data["group"],
                     paid_by_id=data["paid_by"],
                     description=data["description"],
                     amount=data["amount"],
                     currency=data.get("currency", "INR"),
-                    expense_date=data["expense_date"],
+                    expense_date=parsed_date,
                     split_type=data["split_type"]
                 )
 
