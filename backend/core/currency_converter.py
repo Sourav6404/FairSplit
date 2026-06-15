@@ -1,19 +1,19 @@
 from decimal import Decimal
 import requests
 from datetime import datetime
-def normalize_date(
-    self,
-    date
-):
-
-    return datetime.strptime(
-        date,
-        "%d-%m-%Y"
-    ).strftime(
-        "%Y-%m-%d"
-    )
 
 class CurrencyConverter:
+
+    def normalize_date(self, date):
+        # Try multiple date formats to be flexible
+        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(date, fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        # If nothing works, return the date as-is
+        return date
+
 
     def get_exchange_rate(
         self,

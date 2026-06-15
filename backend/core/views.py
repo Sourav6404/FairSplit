@@ -169,6 +169,13 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        group_id = self.request.query_params.get('group')
+        if group_id:
+            queryset = queryset.filter(group_id=group_id)
+        return queryset
+
     @action(
     detail=False,
     methods=["post"]
@@ -516,46 +523,51 @@ class DashboardViewSet(APIView):
 
         total_members = Member.objects.count()
 
+    def get(self, request):
+        total_groups = Group.objects.count()
+        total_members = Member.objects.count()
         total_expenses = Expense.objects.count()
+        total_settlements = Settlement.objects.count()
 
-        total_settlements = (
-            Settlement.objects.count()
-        )
+        user_first_name = request.user.first_name
+        user_username = request.user.username
+        
+        amount_to_get = Decimal("0")
+        amount_you_owe = Decimal("0")
+        personal_expense = Decimal("0")
+        
+        groups = Group.objects.all()
+        for group in groups:
+            calculator = BalanceCalculator(group)
+            summary = calculator.get_balance_summary()
+            
+            # Match member by first_name or username
+            member_summary = None
+            if user_first_name and user_first_name in summary:
+                member_summary = summary[user_first_name]
+            elif user_username in summary:
+                member_summary = summary[user_username]
+                
+            if member_summary:
+                bal = member_summary["balance"]
+                if bal > 0:
+                    amount_to_get += bal
+                elif bal < 0:
+                    amount_you_owe += abs(bal)
+                # "share" is the amount the user is responsible for (their personal expense)
+                personal_expense += member_summary.get("share", Decimal("0"))
 
-        total_expense_amount = (
-            Expense.objects.aggregate(
-                total=Sum("amount")
-            )["total"]
-            or 0
-        )
-
-        total_settlement_amount = (
-            Settlement.objects.aggregate(
-                total=Sum("amount")
-            )["total"]
-            or 0
-        )
-
-        pending_balance = (
-            total_expense_amount
-            - total_settlement_amount
-        )
+        total_expense_amount = Expense.objects.aggregate(total=Sum("amount"))["total"] or 0
 
         return Response(
             {
-                "total_groups":
-                    total_groups,
-
-                "total_members":
-                    total_members,
-
-                "total_expenses":
-                    total_expenses,
-
-                "total_settlements":
-                    total_settlements,
-
-                "pending_balance":
-                    pending_balance
+                "total_groups": total_groups,
+                "total_members": total_members,
+                "total_expenses": total_expenses,
+                "total_settlements": total_settlements,
+                "pending_balance": float(amount_to_get),
+                "total_expenses_owed": float(amount_you_owe),
+                "personal_expense": float(personal_expense),
+                "total_expense_amount": float(total_expense_amount)
             }
         )
