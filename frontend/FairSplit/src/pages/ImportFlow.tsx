@@ -140,6 +140,7 @@ export function ImportFlow() {
     const detected: Anomaly[] = [];
     const seen = new Set<string>();
     const memberSetLower = new Set(members.map(m => m.toLowerCase()));
+    const flaggedUnknownUsers = new Set<string>();
 
     // Helper to safely compare DD-MM-YYYY strings in JS Date
     const parseDDMMYYYY = (dateStr: string): Date => {
@@ -224,10 +225,7 @@ export function ImportFlow() {
     }
 
     // Simulated join/left dates for testing scope.md limits
-    const leftDates: Record<string, string> = {
-      "aisha": "25-02-2026",
-      "meera": "20-02-2026"
-    };
+    const leftDates: Record<string, string> = {};
     const joinDates: Record<string, string> = {
       "dev": "10-02-2026",
       "sam": "10-02-2026"
@@ -287,7 +285,7 @@ export function ImportFlow() {
       }
 
       // 4. Duplicate Check
-      const key = `${exp.description}-${exp.amount}-${exp.expense_date}-${exp.paid_by_name}`;
+      const key = `${exp.description.toLowerCase().trim()}-${exp.amount}-${exp.expense_date}-${(exp.paid_by_name || '').toLowerCase().trim()}`;
       if (seen.has(key)) {
         detected.push({
           id: `ANOM-DUP-${idx}`,
@@ -308,11 +306,11 @@ export function ImportFlow() {
       for (let j = 0; j < idx; j++) {
         const other = expenses[j];
         if (
-          other.description === exp.description &&
+          other.description.toLowerCase().trim() === exp.description.toLowerCase().trim() &&
           other.expense_date === exp.expense_date &&
           [...other.participants_names].sort().join(";") === [...exp.participants_names].sort().join(";")
         ) {
-          if (other.amount !== exp.amount || other.paid_by_name !== exp.paid_by_name) {
+          if (other.amount !== exp.amount || (other.paid_by_name || '').toLowerCase().trim() !== (exp.paid_by_name || '').toLowerCase().trim()) {
             detected.push({
               id: `ANOM-CONFLICT-${idx}`,
               type: "conflict",
@@ -360,20 +358,51 @@ export function ImportFlow() {
 
       // 8. Unknown User (Guest) Check
       if (exp.paid_by_name) {
-        const payerLower = exp.paid_by_name.trim().toLowerCase();
-        if (!memberSetLower.has(payerLower) && !flaggedSimilarNames.has(payerLower)) {
+        const payerClean = exp.paid_by_name.trim();
+        const payerLower = payerClean.toLowerCase();
+        if (
+          !memberSetLower.has(payerLower) &&
+          !flaggedSimilarNames.has(payerLower) &&
+          !flaggedUnknownUsers.has(payerLower)
+        ) {
+          flaggedUnknownUsers.add(payerLower);
           detected.push({
-            id: `ANOM-GUEST-${idx}`,
+            id: `ANOM-GUEST-${idx}-${payerLower}`,
             type: "unknown_guest",
             name: "Unknown User",
             severity: "warning",
-            expenseName: exp.description,
-            details: `Payer '${exp.paid_by_name}' is not in the confirmed group members list.`,
+            expenseName: "Member Matching Check",
+            details: `Payer '${payerClean}' is not in the confirmed group members list.`,
             resolved: false,
             decision: null,
-            data: { name: exp.paid_by_name, ...exp }
+            data: { name: payerClean, ...exp }
           });
         }
+      }
+
+      if (exp.participants_names) {
+        exp.participants_names.forEach(p => {
+          const pClean = p.trim();
+          const pLower = pClean.toLowerCase();
+          if (
+            !memberSetLower.has(pLower) &&
+            !flaggedSimilarNames.has(pLower) &&
+            !flaggedUnknownUsers.has(pLower)
+          ) {
+            flaggedUnknownUsers.add(pLower);
+            detected.push({
+              id: `ANOM-GUEST-${idx}-${pLower}`,
+              type: "unknown_guest",
+              name: "Unknown User",
+              severity: "warning",
+              expenseName: "Member Matching Check",
+              details: `Participant '${pClean}' is not in the confirmed group members list.`,
+              resolved: false,
+              decision: null,
+              data: { name: pClean, ...exp }
+            });
+          }
+        });
       }
 
       // 9. Invalid Percentage Check
@@ -603,14 +632,38 @@ export function ImportFlow() {
 
       const splitDetailsVal = splitDetailsIdx !== -1 ? (row[splitDetailsIdx] || "") : "";
       const shareAmounts: Record<string, number> = {};
+      const isShareType = rawSplitType.includes("share");
+
       if (splitDetailsVal) {
         const parts = splitDetailsVal.split(";");
+        let totalRatio = 0;
+        const parsedRatios: Record<string, number> = {};
+
         for (const part of parts) {
           const match = part.trim().match(/^(.+?)\s+([0-9.]+)$/);
           if (match) {
             const name = match[1].trim();
             const val = parseFloat(match[2]);
-            shareAmounts[name] = val;
+            if (isShareType) {
+              parsedRatios[name] = val;
+              totalRatio += val;
+            } else {
+              shareAmounts[name] = val;
+            }
+          }
+        }
+
+        if (isShareType && totalRatio > 0) {
+          const names = Object.keys(parsedRatios);
+          let sumShares = 0;
+          names.forEach(name => {
+            const exactVal = Math.round((amtClean * (parsedRatios[name] / totalRatio)) * 100) / 100;
+            shareAmounts[name] = exactVal;
+            sumShares += exactVal;
+          });
+          const diff = Math.round((amtClean - sumShares) * 100) / 100;
+          if (diff !== 0 && names.length > 0) {
+            shareAmounts[names[0]] = Math.round((shareAmounts[names[0]] + diff) * 100) / 100;
           }
         }
       }
