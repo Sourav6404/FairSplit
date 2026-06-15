@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
 
 export function Expenses() {
-  const [stats, setStats] = useState<any>({ pending_balance: 0, total_expenses_owed: 0, personal_expense: 0 });
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [groups, setGroups] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -16,8 +15,6 @@ export function Expenses() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const statsData = await apiFetch("/dashboard/");
-        setStats(statsData);
 
         const me = await apiFetch("/auth/me/");
         setCurrentUser(me);
@@ -141,12 +138,6 @@ export function Expenses() {
     return chartData.map(({ month, totalAmount, personalAmount }) => ({ month, totalAmount, personalAmount }));
   }, [currentUser, groups, expenses]);
 
-  const getBarColor = (amount: number) => {
-    if (amount < 1000) return "#dcfce7"; // Very light green
-    if (amount < 2000) return "#86efac"; // Light green
-    if (amount < 3000) return "#22c55e"; // Green
-    return "#114b30"; // Dark green
-  };
 
   const sortedExpenses = useMemo(() => {
     return [...expensesList].sort((a, b) => b.amount - a.amount);
