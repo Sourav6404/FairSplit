@@ -29,7 +29,7 @@ export function AddExpense() {
     { id: "3", name: "Priya", selected: true, value: "" },
   ]);
 
-  const form = useForm({
+  const form = useForm<z.infer<typeof expenseSchema>>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
       description: "",

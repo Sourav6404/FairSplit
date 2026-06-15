@@ -4,7 +4,7 @@ import { Bell, BellRing, UserPlus, UploadCloud, DollarSign } from "lucide-react"
 
 export function Notifications() {
   // Toggle this to test empty state
-  const [hasNotifications, setHasNotifications] = useState(true);
+  const [hasNotifications] = useState(true);
 
   const mockNotifications = [
     { id: 1, title: "Expense Added", desc: "Rahul added 'Dinner at Olive' in Goa Trip.", time: "10 mins ago", icon: <DollarSign size={20} className="text-primary" /> },

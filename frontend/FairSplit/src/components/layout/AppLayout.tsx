@@ -2,8 +2,6 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   CheckSquare, 
-  Calendar, 
-  BarChart2, 
   Users, 
   Settings, 
   HelpCircle, 
@@ -11,7 +9,6 @@ import {
   Search,
   Mail,
   Bell,
-  Command,
   Upload
 } from "lucide-react";
 import logo from "@/assets/logo.png";

@@ -10,7 +10,7 @@ export function GroupDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   // Toggle this to test empty state
-  const [hasExpenses, setHasExpenses] = useState(true);
+  const [hasExpenses] = useState(true);
 
   const mockExpenses = [
     { id: 1, desc: "Dinner at Olive", amount: 3000, paidBy: "Rahul", effect: "You owe Rahul ₹500", effectType: "negative", date: "Today" },

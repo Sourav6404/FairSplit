@@ -53,7 +53,7 @@ export function Groups() {
               </div>
               <div className="space-y-4">
                 <Label>Members</Label>
-                {members.map((member, idx) => (
+                {members.map((_, idx) => (
                   <div key={idx} className="flex gap-2">
                     <Input placeholder="Name" className="flex-1" />
                     <Input placeholder="Phone" className="flex-1" />
