@@ -42,48 +42,46 @@ export function Dashboard() {
       return { month: months[d.getMonth()], monthIdx: d.getMonth(), amount: 0 };
     }).reverse();
 
+    console.log("DEBUG CHART INITIAL:", {
+      currentUserExists: !!currentUser,
+      groupsLength: groups.length,
+      expensesLength: expenses.length
+    });
+
     if (!currentUser || !groups.length || !expenses.length) {
       return chartData;
     }
 
-    const myMemberIdsByGroupId = new Map<number, number>();
-    groups.forEach((g: any) => {
-      const myMember = g.members?.find((m: any) => m.user_id === currentUser.id);
-      if (myMember) {
-        myMemberIdsByGroupId.set(g.id, myMember.id);
-      }
-    });
+    const userGroupIds = new Set(groups.map((g: any) => g.id));
+    console.log("DEBUG CHART GROUP IDs:", Array.from(userGroupIds));
 
     expenses.forEach((exp: any) => {
-      const myMemberId = myMemberIdsByGroupId.get(exp.group);
-      if (myMemberId !== undefined) {
-        const part = exp.participants?.find((p: any) => p.member === myMemberId);
-        if (part) {
-          const shareAmount = Number(part.share_amount || 0);
-          
-          let dateObj: Date | null = null;
-          if (exp.expense_date) {
-            const parts = exp.expense_date.split('-');
-            if (parts.length === 3) {
-              if (parts[0].length === 4) {
-                dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-              } else {
-                dateObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
-              }
+      if (userGroupIds.has(exp.group)) {
+        const amount = Number(exp.amount || 0);
+        
+        let dateObj: Date | null = null;
+        if (exp.expense_date) {
+          const parts = exp.expense_date.split('-');
+          if (parts.length === 3) {
+            if (parts[0].length === 4) {
+              dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            } else {
+              dateObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
             }
           }
+        }
 
-          if (dateObj && !isNaN(dateObj.getTime())) {
-            const mIdx = dateObj.getMonth();
-            const bucket = chartData.find(item => item.monthIdx === mIdx);
-            if (bucket) {
-              bucket.amount += shareAmount;
-            }
+        if (dateObj && !isNaN(dateObj.getTime())) {
+          const mIdx = dateObj.getMonth();
+          const bucket = chartData.find(item => item.monthIdx === mIdx);
+          if (bucket) {
+            bucket.amount += amount;
           }
         }
       }
     });
 
+    console.log("DEBUG CHART FINAL DATA:", chartData);
     return chartData.map(({ month, amount }) => ({ month, amount }));
   }, [currentUser, groups, expenses]);
 
