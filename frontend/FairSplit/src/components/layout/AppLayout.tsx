@@ -40,7 +40,10 @@ export function AppLayout() {
         <aside className="w-64 flex flex-col border-r border-gray-100/60 p-6 overflow-y-auto hide-scrollbar">
           <div className="flex items-center gap-3 mb-10">
             <img src={logo} alt="FairSplit Logo" className="w-8 h-8 rounded-full object-cover" />
-            <span className="font-bold text-xl text-gray-900 tracking-tight">FairSplit</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-xl text-gray-900 tracking-tight">FairSplit</span>
+              <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded-md border border-green-100">v2</span>
+            </div>
           </div>
 
           <div className="text-xs font-semibold text-gray-400 mb-4 tracking-wider">MENU</div>

@@ -95,13 +95,6 @@ export function Dashboard() {
     return chartData.map(({ month, totalAmount, personalAmount }) => ({ month, totalAmount, personalAmount }));
   }, [currentUser, groups, expenses]);
 
-  const getBarColor = (amount: number) => {
-    if (amount < 1000) return "#dcfce7"; // Very light green
-    if (amount < 2000) return "#86efac"; // Light green
-    if (amount < 3000) return "#22c55e"; // Green
-    return "#114b30"; // Dark green
-  };
-
   const displayGroups = useMemo(() => {
     return groups.map((g: any) => {
       const balanceVal = Number(g.balance ?? 0);
