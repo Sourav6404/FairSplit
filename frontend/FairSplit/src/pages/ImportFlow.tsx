@@ -501,21 +501,11 @@ export function ImportFlow() {
         });
       }
 
-      // 14. Ambiguous Date Check
-      const parts = rawDate.split(/[-/]/);
-      let isAmbiguous = false;
-      if (parts.length === 3 && parts[0].length !== 4) {
-        const p1 = parseInt(parts[0]);
-        const p2 = parseInt(parts[1]);
-        if (!isNaN(p1) && !isNaN(p2) && p1 <= 12 && p2 <= 12 && p1 !== p2) {
-          isAmbiguous = true;
-        }
-      }
-
+      // 14. Ambiguous Date Check (Only triggered when the month sequence flow is out of order)
       let neighborMismatch = false;
       let prevMonth = "";
       let nextMonth = "";
-      let detailsMsg = `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`;
+      let detailsMsg = "";
 
       if (idx > 0 && idx < expenses.length - 1) {
         const prevExp = expenses[idx - 1];
@@ -540,7 +530,7 @@ export function ImportFlow() {
         }
       }
 
-      if (isAmbiguous || neighborMismatch) {
+      if (neighborMismatch) {
         detected.push({
           id: `ANOM-DATEAMB-${idx}`,
           type: "ambiguous_date",
