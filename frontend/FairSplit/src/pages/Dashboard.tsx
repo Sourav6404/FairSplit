@@ -1,7 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Users, ArrowUpRight } from "lucide-react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 
@@ -9,6 +9,8 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<any>({ pending_balance: 0, total_expenses_owed: 0 });
   const [groups, setGroups] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [expenses, setExpenses] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -18,6 +20,12 @@ export function Dashboard() {
         
         const groupsData = await apiFetch("/groups/");
         setGroups(groupsData);
+
+        const me = await apiFetch("/auth/me/");
+        setCurrentUser(me);
+
+        const expensesData = await apiFetch("/expenses/");
+        setExpenses(expensesData);
       } catch (err) {
         console.error(err);
       }
@@ -26,21 +34,58 @@ export function Dashboard() {
   }, []);
 
   // Chart data for past months expenses
-  const expenseData = stats.personal_expense > 0 ? [
-    { month: "Jan", amount: 1200 },
-    { month: "Feb", amount: 2500 },
-    { month: "Mar", amount: 800 },
-    { month: "Apr", amount: 3500 },
-    { month: "May", amount: 1500 },
-    { month: "Jun", amount: 4200 },
-  ] : [
-    { month: "Jan", amount: 0 },
-    { month: "Feb", amount: 0 },
-    { month: "Mar", amount: 0 },
-    { month: "Apr", amount: 0 },
-    { month: "May", amount: 0 },
-    { month: "Jun", amount: 0 },
-  ];
+  const expenseData = useMemo(() => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const chartData = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      return { month: months[d.getMonth()], monthIdx: d.getMonth(), amount: 0 };
+    }).reverse();
+
+    if (!currentUser || !groups.length || !expenses.length) {
+      return chartData;
+    }
+
+    const myMemberIdsByGroupId = new Map<number, number>();
+    groups.forEach((g: any) => {
+      const myMember = g.members?.find((m: any) => m.user_id === currentUser.id);
+      if (myMember) {
+        myMemberIdsByGroupId.set(g.id, myMember.id);
+      }
+    });
+
+    expenses.forEach((exp: any) => {
+      const myMemberId = myMemberIdsByGroupId.get(exp.group);
+      if (myMemberId !== undefined) {
+        const part = exp.participants?.find((p: any) => p.member === myMemberId);
+        if (part) {
+          const shareAmount = Number(part.share_amount || 0);
+          
+          let dateObj: Date | null = null;
+          if (exp.expense_date) {
+            const parts = exp.expense_date.split('-');
+            if (parts.length === 3) {
+              if (parts[0].length === 4) {
+                dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+              } else {
+                dateObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+              }
+            }
+          }
+
+          if (dateObj && !isNaN(dateObj.getTime())) {
+            const mIdx = dateObj.getMonth();
+            const bucket = chartData.find(item => item.monthIdx === mIdx);
+            if (bucket) {
+              bucket.amount += shareAmount;
+            }
+          }
+        }
+      }
+    });
+
+    return chartData.map(({ month, amount }) => ({ month, amount }));
+  }, [currentUser, groups, expenses]);
 
   // Helper to determine bar color based on amount (shades of green)
   const getBarColor = (amount: number) => {
@@ -50,15 +95,30 @@ export function Dashboard() {
     return "#114b30"; // Dark green
   };
 
-  // In a real app we'd map groupsData to this format using balance_summary endpoints
-  // For now we map the raw backend group
-  const displayGroups = groups.map((g: any) => ({
-    id: g.id,
-    name: g.name,
-    members: g.members?.length || 0,
-    balance: "Active",
-    isOwed: null,
-  }));
+  const displayGroups = useMemo(() => {
+    return groups.map((g: any) => {
+      const balanceVal = Number(g.balance ?? 0);
+      let balanceText = "Settled up";
+      let isOwed: boolean | null = null;
+      if (balanceVal > 0) {
+        balanceText = `+ ₹${balanceVal.toLocaleString()}`;
+        isOwed = true;
+      } else if (balanceVal < 0) {
+        balanceText = `- ₹${Math.abs(balanceVal).toLocaleString()}`;
+        isOwed = false;
+      } else {
+        balanceText = "Settled";
+        isOwed = null;
+      }
+      return {
+        id: g.id,
+        name: g.name,
+        members: g.members?.length || 0,
+        balance: balanceText,
+        isOwed: isOwed,
+      };
+    });
+  }, [groups]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -148,7 +208,7 @@ export function Dashboard() {
             </div>
           ) : (
             displayGroups.map((group) => (
-              <div key={group.id} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-green-100 hover:bg-green-50/30 transition-all cursor-pointer">
+              <div key={group.id} onClick={() => navigate(`/groups/${group.id}`)} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-green-100 hover:bg-green-50/30 transition-all cursor-pointer">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-[#114b30]/10 rounded-full flex items-center justify-center text-[#114b30]">
                     <Users size={20} />

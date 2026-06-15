@@ -4,8 +4,9 @@ import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, PlusCircle, ArrowUpRight, ArrowDownLeft, Users } from "lucide-react";
+import { ArrowLeft, PlusCircle, ArrowUpRight, ArrowDownLeft, Users, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export function GroupDetails() {
   const { id } = useParams();
@@ -17,6 +18,24 @@ export function GroupDetails() {
   const [activeUser, setActiveUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteGroup = async () => {
+    try {
+      setDeleting(true);
+      await apiFetch(`/groups/${id}/`, {
+        method: "DELETE"
+      });
+      setIsDeleteOpen(false);
+      navigate("/groups");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete group.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -97,10 +116,37 @@ export function GroupDetails() {
             <Users size={14} /> {group.members?.length || 0} Members
           </p>
         </div>
-        <Button onClick={() => navigate(`/groups/${id}/add-expense`)} size="sm">
-          <PlusCircle size={16} className="mr-2" />
-          Add Expense
-        </Button>
+        <div className="flex items-center gap-2">
+          <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="icon" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300">
+                <Trash2 size={18} />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle className="text-red-600 flex items-center gap-2">
+                  <Trash2 size={20} /> Delete Group
+                </DialogTitle>
+                <DialogDescription className="pt-2">
+                  Are you sure you want to delete <strong>{group.name}</strong>? This action is permanent and will delete all expenses, settlements, and history for this group.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex gap-2 mt-4">
+                <Button variant="ghost" onClick={() => setIsDeleteOpen(false)} className="flex-1">
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteGroup} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+                  {deleting ? "Deleting..." : "Delete Group"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Button onClick={() => navigate(`/groups/${id}/add-expense`)} size="sm">
+            <PlusCircle size={16} className="mr-2" />
+            Add Expense
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="expenses" className="flex-1 flex flex-col">

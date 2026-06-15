@@ -6,44 +6,133 @@ import { apiFetch } from "@/lib/api";
 
 export function Expenses() {
   const [stats, setStats] = useState<any>({ pending_balance: 0, total_expenses_owed: 0, personal_expense: 0 });
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expensesList, setExpensesList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const loadData = async () => {
       try {
+        setLoading(true);
         const statsData = await apiFetch("/dashboard/");
         setStats(statsData);
+
+        const me = await apiFetch("/auth/me/");
+        setCurrentUser(me);
+
+        const groupsData = await apiFetch("/groups/");
+        setGroups(groupsData);
+
+        const expensesData = await apiFetch("/expenses/");
+        setExpenses(expensesData);
+
+        // Fetch settlements for all groups in parallel to construct dynamic balance details
+        const settlementsPromises = groupsData.map((g: any) =>
+          apiFetch(`/groups/${g.id}/settlements/`).then((settlements: any[]) => ({
+            groupName: g.name,
+            groupId: g.id,
+            settlements,
+            groupMembers: g.members || []
+          }))
+        );
+        const allSettlementsResults = await Promise.all(settlementsPromises);
+
+        const list: any[] = [];
+        let idCounter = 1;
+
+        allSettlementsResults.forEach(({ groupName, settlements, groupMembers }) => {
+          const myMember = groupMembers.find((m: any) => m.user_id === me.id);
+          const myMemberId = myMember?.id;
+
+          settlements.forEach((s: any) => {
+            const isPayer = s.payer_id === myMemberId || (me.username && s.payer_phone === me.username);
+            const isReceiver = s.receiver_id === myMemberId || (me.username && s.receiver_phone === me.username);
+
+            if (isPayer) {
+              list.push({
+                id: idCounter++,
+                name: s.receiver_name,
+                amount: Number(s.amount),
+                type: "owe",
+                group: groupName
+              });
+            } else if (isReceiver) {
+              list.push({
+                id: idCounter++,
+                name: s.payer_name,
+                amount: Number(s.amount),
+                type: "get",
+                group: groupName
+              });
+            }
+          });
+        });
+
+        setExpensesList(list);
       } catch (err) {
         console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchStats();
+    loadData();
   }, []);
 
-  // Mock data matching the dashboard totals (Get: 4250, Owe: 850)
-  const expensesList = stats.personal_expense > 0 || stats.pending_balance > 0 ? [
-    { id: 1, name: "Rahul Sharma", amount: 2000, type: "get", group: "Goa Trip" },
-    { id: 2, name: "Priya Patel", amount: 1500, type: "get", group: "Roommates" },
-    { id: 3, name: "Amit Kumar", amount: 750, type: "get", group: "Goa Trip" },
-    { id: 4, name: "Sneha Gupta", amount: 500, type: "owe", group: "Office Lunch" },
-    { id: 5, name: "Vikram Singh", amount: 350, type: "owe", group: "Roommates" },
-  ] : [];
-
   // Chart data for past months expenses
-  const expenseData = stats.personal_expense > 0 ? [
-    { month: "Jan", amount: 1200 },
-    { month: "Feb", amount: 2500 },
-    { month: "Mar", amount: 800 },
-    { month: "Apr", amount: 3500 },
-    { month: "May", amount: 1500 },
-    { month: "Jun", amount: 4200 },
-  ] : [
-    { month: "Jan", amount: 0 },
-    { month: "Feb", amount: 0 },
-    { month: "Mar", amount: 0 },
-    { month: "Apr", amount: 0 },
-    { month: "May", amount: 0 },
-    { month: "Jun", amount: 0 },
-  ];
+  const expenseData = useMemo(() => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const chartData = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      return { month: months[d.getMonth()], monthIdx: d.getMonth(), amount: 0 };
+    }).reverse();
+
+    if (!currentUser || !groups.length || !expenses.length) {
+      return chartData;
+    }
+
+    const myMemberIdsByGroupId = new Map<number, number>();
+    groups.forEach((g: any) => {
+      const myMember = g.members?.find((m: any) => m.user_id === currentUser.id);
+      if (myMember) {
+        myMemberIdsByGroupId.set(g.id, myMember.id);
+      }
+    });
+
+    expenses.forEach((exp: any) => {
+      const myMemberId = myMemberIdsByGroupId.get(exp.group);
+      if (myMemberId !== undefined) {
+        const part = exp.participants?.find((p: any) => p.member === myMemberId);
+        if (part) {
+          const shareAmount = Number(part.share_amount || 0);
+          
+          let dateObj: Date | null = null;
+          if (exp.expense_date) {
+            const parts = exp.expense_date.split('-');
+            if (parts.length === 3) {
+              if (parts[0].length === 4) {
+                dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+              } else {
+                dateObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+              }
+            }
+          }
+
+          if (dateObj && !isNaN(dateObj.getTime())) {
+            const mIdx = dateObj.getMonth();
+            const bucket = chartData.find(item => item.monthIdx === mIdx);
+            if (bucket) {
+              bucket.amount += shareAmount;
+            }
+          }
+        }
+      }
+    });
+
+    return chartData.map(({ month, amount }) => ({ month, amount }));
+  }, [currentUser, groups, expenses]);
 
   // Helper to determine bar color based on amount (shades of green)
   const getBarColor = (amount: number) => {
@@ -60,6 +149,14 @@ export function Expenses() {
 
   const totalToGet = expensesList.filter(e => e.type === "get").reduce((acc, curr) => acc + curr.amount, 0);
   const totalToOwe = expensesList.filter(e => e.type === "owe").reduce((acc, curr) => acc + curr.amount, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#114b30]"></div>
+      </div>
+    );
+  }
 
   // If there are no expenses at all, we would show the empty state
   if (expensesList.length === 0) {
