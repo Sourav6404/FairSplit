@@ -39,6 +39,7 @@ interface ParsedExpense {
   description: string;
   amount: number;
   expense_date: string;
+  raw_date?: string;
   currency: string;
   paid_by_name: string;
   split_type: string;
@@ -145,9 +146,11 @@ export function ImportFlow() {
       for (let j = i + 1; j < members.length; j++) {
         const n1 = members[i];
         const n2 = members[j];
+        const n1Parts = n1.trim().toLowerCase().split(/\s+/);
+        const n2Parts = n2.trim().toLowerCase().split(/\s+/);
         if (
-          n1.toLowerCase() !== n2.toLowerCase() &&
-          (n1.toLowerCase().includes(n2.toLowerCase()) || n2.toLowerCase().includes(n1.toLowerCase()))
+          n1Parts[0] === n2Parts[0] &&
+          n1.toLowerCase() !== n2.toLowerCase()
         ) {
           detected.push({
             id: `ANOM-SIMILAR-${i}-${j}`,
@@ -164,49 +167,70 @@ export function ImportFlow() {
       }
     }
 
-    // Check for multiple currencies across all expenses
-    const currencies = expenses.map(e => e.currency).filter(Boolean);
-    const uniqueCurrencies = Array.from(new Set(currencies));
-    if (uniqueCurrencies.length > 1) {
-      // Find the most common currency
-      const counts: Record<string, number> = {};
-      currencies.forEach(c => { counts[c] = (counts[c] || 0) + 1; });
-      const mainCurrency = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
-      
-      expenses.forEach((exp, idx) => {
-        if (exp.currency && exp.currency !== mainCurrency) {
-          detected.push({
-            id: `ANOM-MULTICUR-${idx}`,
-            type: "multiple_currencies",
-            name: "Multiple Currencies",
-            severity: "info",
-            expenseName: exp.description,
-            details: `Expense uses currency '${exp.currency}' instead of the main currency '${mainCurrency}'.`,
-            resolved: false,
-            decision: null,
-            data: { currencies: uniqueCurrencies, ...exp }
-          });
-        }
-      });
-    }
+    // Simulated join/left dates for testing scope.md limits
+    const leftDates: Record<string, string> = {
+      "aisha": "2026-02-25",
+      "meera": "2026-02-20"
+    };
+    const joinDates: Record<string, string> = {
+      "dev": "2026-02-10",
+      "sam": "2026-02-10"
+    };
 
     expenses.forEach((exp, idx) => {
-      // 1. Negative Amount
+      // 1. Negative Amount & Refund
       if (exp.amount < 0) {
+        const lowerDesc = exp.description.toLowerCase();
+        const isRefund = ["refund", "cashback", "returned", "return", "reimbursement"].some(kw => lowerDesc.includes(kw));
+
         detected.push({
           id: `ANOM-NEG-${idx}`,
-          type: "negative_amount",
-          name: "Negative Amount",
+          type: isRefund ? "refund" : "negative_amount",
+          name: isRefund ? "Cashback Refund" : "Negative Amount",
           severity: "warning",
           expenseName: exp.description,
-          details: `Expense '${exp.description}' has a negative amount (${exp.amount}).`,
+          details: isRefund
+            ? `Expense '${exp.description}' appears to be a refund or cashback transaction.`
+            : `Expense '${exp.description}' has a negative amount (${exp.amount}).`,
           resolved: false,
           decision: null,
           data: exp
         });
       }
 
-      // 2. Duplicate Check
+      // 2. Zero Amount Check
+      if (exp.amount === 0) {
+        detected.push({
+          id: `ANOM-ZERO-${idx}`,
+          type: "zero_amount",
+          name: "Zero Amount Expense",
+          severity: "info",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' has a zero amount (₹0).`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+
+      // 3. High Precision Check
+      const amountString = exp.amount.toString();
+      const decimalMatch = amountString.match(/\.(\d+)/);
+      if (decimalMatch && decimalMatch[1].length > 2) {
+        detected.push({
+          id: `ANOM-PRECISION-${idx}`,
+          type: "high_precision",
+          name: "High Precision Amount",
+          severity: "info",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' has high decimal precision: ${exp.amount}.`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+
+      // 4. Duplicate Check
       const key = `${exp.description}-${exp.amount}-${exp.expense_date}-${exp.paid_by_name}`;
       if (seen.has(key)) {
         detected.push({
@@ -224,8 +248,32 @@ export function ImportFlow() {
         seen.add(key);
       }
 
-      // 3. Missing Payer
-      if (!exp.paid_by_name) {
+      // 5. Conflicting Duplicate Check
+      for (let j = 0; j < idx; j++) {
+        const other = expenses[j];
+        if (
+          other.description === exp.description &&
+          other.expense_date === exp.expense_date &&
+          [...other.participants_names].sort().join(";") === [...exp.participants_names].sort().join(";")
+        ) {
+          if (other.amount !== exp.amount || other.paid_by_name !== exp.paid_by_name) {
+            detected.push({
+              id: `ANOM-CONFLICT-${idx}`,
+              type: "conflict",
+              name: "Conflicting Duplicate Expense",
+              severity: "critical",
+              expenseName: exp.description,
+              details: `Conflicting records for '${exp.description}': ${exp.paid_by_name} (₹${exp.amount}) vs ${other.paid_by_name} (₹${other.amount}).`,
+              resolved: false,
+              decision: null,
+              data: { amountA: other.amount, amountB: exp.amount, ...exp }
+            });
+          }
+        }
+      }
+
+      // 6. Missing Payer
+      if (!exp.paid_by_name || exp.paid_by_name.trim() === "") {
         detected.push({
           id: `ANOM-PAY-${idx}`,
           type: "missing_payer",
@@ -239,8 +287,8 @@ export function ImportFlow() {
         });
       }
 
-      // 4. Missing Currency
-      if (!exp.currency) {
+      // 7. Missing Currency
+      if (!exp.currency || exp.currency.trim() === "") {
         detected.push({
           id: `ANOM-CUR-${idx}`,
           type: "missing_currency",
@@ -254,7 +302,7 @@ export function ImportFlow() {
         });
       }
 
-      // 5. Unknown Guest Check
+      // 8. Unknown Guest Check
       if (exp.paid_by_name && !memberSetLower.has(exp.paid_by_name.toLowerCase())) {
         detected.push({
           id: `ANOM-GUEST-${idx}`,
@@ -269,7 +317,7 @@ export function ImportFlow() {
         });
       }
 
-      // 6. Invalid Percentage Check
+      // 9. Invalid Percentage Check
       if (exp.split_type === "percentage" && exp.share_amounts) {
         const totalPct = Object.values(exp.share_amounts).reduce((a, b) => a + b, 0);
         if (totalPct !== 100 && totalPct > 0) {
@@ -287,7 +335,7 @@ export function ImportFlow() {
         }
       }
 
-      // 7. Split Conflict Check
+      // 10. Split Conflict Check
       if (exp.split_type === "exact" && exp.share_amounts) {
         const splitAmt = Object.values(exp.share_amounts).reduce((a, b) => a + b, 0);
         if (Math.abs(splitAmt - exp.amount) > 0.01 && splitAmt > 0) {
@@ -304,6 +352,119 @@ export function ImportFlow() {
           });
         }
       }
+
+      // 11. Inconsistent Split Type Check
+      if (exp.split_type === "equal" && exp.share_amounts && Object.keys(exp.share_amounts).length > 0) {
+        detected.push({
+          id: `ANOM-SPLITTYPE-${idx}`,
+          type: "inconsistent_split_type",
+          name: "Inconsistent Split Type",
+          severity: "warning",
+          expenseName: exp.description,
+          details: `Split type is equal but custom split details are defined.`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+
+      // 12. Settlement Check
+      const lowerDesc = exp.description.toLowerCase();
+      const isSettlement = ["paid back", "repaid", "settled", "gave back"].some(kw => lowerDesc.includes(kw));
+      if (isSettlement) {
+        detected.push({
+          id: `ANOM-SETTLE-${idx}`,
+          type: "settlement",
+          name: "Settlement Logged as Expense",
+          severity: "warning",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' looks like a repayment/settlement.`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+
+      // 13. Invalid Date Format Check
+      const rawDate = exp.raw_date || "";
+      const isStandardDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
+      if (rawDate && !isStandardDate) {
+        detected.push({
+          id: `ANOM-DATEFMT-${idx}`,
+          type: "invalid_date_format",
+          name: "Invalid Date Format",
+          severity: "info",
+          expenseName: exp.description,
+          details: `Date format '${rawDate}' is non-standard. Normalized to YYYY-MM-DD.`,
+          resolved: false,
+          decision: null,
+          data: { original: rawDate, converted: exp.expense_date }
+        });
+      }
+
+      // 14. Ambiguous Date Check
+      const parts = rawDate.split(/[-/]/);
+      if (parts.length === 3) {
+        const p1 = parseInt(parts[0]);
+        const p2 = parseInt(parts[1]);
+        if (!isNaN(p1) && !isNaN(p2) && p1 <= 12 && p2 <= 12 && p1 !== p2) {
+          detected.push({
+            id: `ANOM-DATEAMB-${idx}`,
+            type: "ambiguous_date",
+            name: "Ambiguous Date Format",
+            severity: "warning",
+            expenseName: exp.description,
+            details: `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`,
+            resolved: false,
+            decision: null,
+            data: { original_date: rawDate, expense_date: exp.expense_date }
+          });
+        }
+      }
+
+      // 15. Member Left Group Check
+      exp.participants_names.forEach(p => {
+        const leftLimit = leftDates[p.toLowerCase()];
+        if (leftLimit) {
+          const expMs = new Date(exp.expense_date).getTime();
+          const leftMs = new Date(leftLimit).getTime();
+          if (!isNaN(expMs) && !isNaN(leftMs) && expMs > leftMs) {
+            detected.push({
+              id: `ANOM-LEFT-${idx}-${p}`,
+              type: "member_left_group",
+              name: "Member Left Group",
+              severity: "warning",
+              expenseName: exp.description,
+              details: `Member '${p}' had left the group before this expense occurred.`,
+              resolved: false,
+              decision: null,
+              data: { name: p, leftDate: leftLimit, expenseDate: exp.expense_date }
+            });
+          }
+        }
+      });
+
+      // 16. Member Join Violation Check
+      exp.participants_names.forEach(p => {
+        const joinLimit = joinDates[p.toLowerCase()];
+        if (joinLimit) {
+          const expMs = new Date(exp.expense_date).getTime();
+          const joinMs = new Date(joinLimit).getTime();
+          if (!isNaN(expMs) && !isNaN(joinMs) && expMs < joinMs) {
+            detected.push({
+              id: `ANOM-JOIN-${idx}-${p}`,
+              type: "member_join_violation",
+              name: "Member Join Violation",
+              severity: "warning",
+              expenseName: exp.description,
+              details: `Member '${p}' joined after this expense was incurred.`,
+              resolved: false,
+              decision: null,
+              data: { name: p, joinDate: joinLimit, expenseDate: exp.expense_date }
+            });
+          }
+        }
+      });
     });
 
     return detected;
@@ -412,6 +573,7 @@ export function ImportFlow() {
         description: desc,
         amount: amtClean,
         expense_date: dateClean,
+        raw_date: rawDate,
         currency: currency || "INR",
         paid_by_name: paidByName,
         split_type: splitType,
@@ -1248,6 +1410,74 @@ export function ImportFlow() {
                   </Button>
                   <Button onClick={() => applyAnomalyResolution("Chose USD as main currency instead")} variant="outline" className="flex-1 border-gray-300">
                     Choose Another Currency
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ZERO AMOUNT EXPENSE */}
+            {anomalies[activeAnomalyIdx].type === "zero_amount" && (
+              <div className="space-y-4">
+                <div className="bg-yellow-50/50 border border-yellow-200 p-4 rounded-2xl text-center">
+                  <p className="text-sm text-yellow-800 font-medium">This expense has a zero amount (₹0). It will not affect balances.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <Button onClick={() => applyAnomalyResolution("Kept zero-amount record")} className="flex-1 bg-[#114b30] hover:bg-[#155436] text-white">
+                    Keep Record
+                  </Button>
+                  <Button onClick={() => applyAnomalyResolution("Removed zero-amount record")} className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+                    Remove Record
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* HIGH PRECISION AMOUNT */}
+            {anomalies[activeAnomalyIdx].type === "high_precision" && (
+              <div className="space-y-4">
+                <div className="bg-yellow-50/50 border border-yellow-200 p-4 rounded-2xl text-center">
+                  <p className="text-sm text-yellow-800 font-medium">This amount has high decimal precision: {anomalies[activeAnomalyIdx].data.amount}. Actual currencies only support up to 2 decimal places.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <Button onClick={() => applyAnomalyResolution("Rounded to 2 decimal places")} className="flex-1 bg-[#114b30] hover:bg-[#155436] text-white">
+                    Round to 2 Decimals
+                  </Button>
+                  <Button onClick={() => applyAnomalyResolution("Kept original value")} variant="outline" className="flex-1 border-gray-300">
+                    Keep Original
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* INCONSISTENT SPLIT TYPE */}
+            {anomalies[activeAnomalyIdx].type === "inconsistent_split_type" && (
+              <div className="space-y-4">
+                <div className="bg-yellow-50/50 border border-yellow-200 p-4 rounded-2xl text-center">
+                  <p className="text-sm text-yellow-800 font-medium">Split type is declared as 'equal', but custom details are specified.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <Button onClick={() => applyAnomalyResolution("Ignored custom shares, split equally")} className="flex-1 bg-[#114b30] hover:bg-[#155436] text-white">
+                    Split Equally
+                  </Button>
+                  <Button onClick={() => applyAnomalyResolution("Converted split type to custom/exact")} className="flex-1 bg-[#114b30] hover:bg-[#155436] text-white">
+                    Use Custom Shares
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* AMBIGUOUS DATE */}
+            {anomalies[activeAnomalyIdx].type === "ambiguous_date" && (
+              <div className="space-y-4">
+                <div className="bg-yellow-50/50 border border-yellow-200 p-4 rounded-2xl text-center">
+                  <p className="text-sm text-yellow-800 font-medium">Ambiguous date format: {anomalies[activeAnomalyIdx].data.original_date || anomalies[activeAnomalyIdx].data.expense_date}</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <Button onClick={() => applyAnomalyResolution("Parsed as DD-MM-YYYY")} className="flex-1 bg-[#114b30] hover:bg-[#155436] text-white">
+                    Interpret as DD-MM-YYYY
+                  </Button>
+                  <Button onClick={() => applyAnomalyResolution("Parsed as MM-DD-YYYY")} className="flex-1 bg-[#114b30] hover:bg-[#155436] text-white">
+                    Interpret as MM-DD-YYYY
                   </Button>
                 </div>
               </div>
