@@ -503,22 +503,43 @@ export function ImportFlow() {
 
       // 14. Ambiguous Date Check
       const parts = rawDate.split(/[-/]/);
+      let isAmbiguous = false;
       if (parts.length === 3 && parts[0].length !== 4) {
         const p1 = parseInt(parts[0]);
         const p2 = parseInt(parts[1]);
         if (!isNaN(p1) && !isNaN(p2) && p1 <= 12 && p2 <= 12 && p1 !== p2) {
-          detected.push({
-            id: `ANOM-DATEAMB-${idx}`,
-            type: "ambiguous_date",
-            name: "Ambiguous Date",
-            severity: "warning",
-            expenseName: exp.description,
-            details: `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`,
-            resolved: false,
-            decision: null,
-            data: { original_date: rawDate, expense_date: exp.expense_date }
-          });
+          isAmbiguous = true;
         }
+      }
+
+      let neighborMismatch = false;
+      let prevMonth = "";
+      let nextMonth = "";
+      if (idx > 0 && idx < expenses.length - 1) {
+        const prevExp = expenses[idx - 1];
+        const nextExp = expenses[idx + 1];
+        prevMonth = prevExp.expense_date.split("-")[1];
+        nextMonth = nextExp.expense_date.split("-")[1];
+        const currMonth = exp.expense_date.split("-")[1];
+        if (prevMonth && nextMonth && currMonth && prevMonth === nextMonth && currMonth !== prevMonth) {
+          neighborMismatch = true;
+        }
+      }
+
+      if (isAmbiguous || neighborMismatch) {
+        detected.push({
+          id: `ANOM-DATEAMB-${idx}`,
+          type: "ambiguous_date",
+          name: "Ambiguous Date",
+          severity: "warning",
+          expenseName: exp.description,
+          details: neighborMismatch
+            ? `Date '${rawDate}' has month different from both previous and next transaction months (which are both ${prevMonth}).`
+            : `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`,
+          resolved: false,
+          decision: null,
+          data: { original_date: rawDate, expense_date: exp.expense_date }
+        });
       }
 
       // 15. Member Left Group Check
