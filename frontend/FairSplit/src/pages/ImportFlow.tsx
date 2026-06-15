@@ -501,6 +501,26 @@ export function ImportFlow() {
         });
       }
 
+      // 14. Ambiguous Date Check
+      const parts = rawDate.split(/[-/]/);
+      if (parts.length === 3 && parts[0].length !== 4) {
+        const p1 = parseInt(parts[0]);
+        const p2 = parseInt(parts[1]);
+        if (!isNaN(p1) && !isNaN(p2) && p1 <= 12 && p2 <= 12 && p1 !== p2) {
+          detected.push({
+            id: `ANOM-DATEAMB-${idx}`,
+            type: "ambiguous_date",
+            name: "Ambiguous Date",
+            severity: "warning",
+            expenseName: exp.description,
+            details: `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`,
+            resolved: false,
+            decision: null,
+            data: { original_date: rawDate, expense_date: exp.expense_date }
+          });
+        }
+      }
+
       // 15. Member Left Group Check
       exp.participants_names.forEach(p => {
         const pLower = p.toLowerCase();
