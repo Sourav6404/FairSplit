@@ -515,14 +515,28 @@ export function ImportFlow() {
       let neighborMismatch = false;
       let prevMonth = "";
       let nextMonth = "";
+      let detailsMsg = `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`;
+
       if (idx > 0 && idx < expenses.length - 1) {
         const prevExp = expenses[idx - 1];
         const nextExp = expenses[idx + 1];
         prevMonth = prevExp.expense_date.split("-")[1];
         nextMonth = nextExp.expense_date.split("-")[1];
         const currMonth = exp.expense_date.split("-")[1];
-        if (prevMonth && nextMonth && currMonth && prevMonth === nextMonth && currMonth !== prevMonth) {
-          neighborMismatch = true;
+
+        if (prevMonth && nextMonth && currMonth) {
+          const pm = parseInt(prevMonth);
+          const nm = parseInt(nextMonth);
+          const cm = parseInt(currMonth);
+          if (!isNaN(pm) && !isNaN(nm) && !isNaN(cm)) {
+            if (pm === nm && cm !== pm) {
+              neighborMismatch = true;
+              detailsMsg = `Date '${rawDate}' has month different from neighboring months (which are both ${prevMonth}).`;
+            } else if (!((cm >= pm && cm <= nm) || (cm >= nm && cm <= pm))) {
+              neighborMismatch = true;
+              detailsMsg = `Date '${rawDate}' has month out of chronological order (previous month: ${prevMonth}, next month: ${nextMonth}).`;
+            }
+          }
         }
       }
 
@@ -533,9 +547,7 @@ export function ImportFlow() {
           name: "Ambiguous Date",
           severity: "warning",
           expenseName: exp.description,
-          details: neighborMismatch
-            ? `Date '${rawDate}' has month different from both previous and next transaction months (which are both ${prevMonth}).`
-            : `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`,
+          details: detailsMsg,
           resolved: false,
           decision: null,
           data: { original_date: rawDate, expense_date: exp.expense_date }
