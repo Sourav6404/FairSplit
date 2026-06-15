@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   UploadCloud, 
   CheckCircle, 
-  AlertTriangle, 
   ArrowLeft, 
   ArrowRight, 
   UserPlus, 
@@ -19,7 +18,6 @@ import {
   AlertCircle, 
   RefreshCw, 
   Sparkles, 
-  PlusCircle,
   HelpCircle
 } from "lucide-react";
 
@@ -1114,7 +1112,7 @@ export function ImportFlow() {
         <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400">
           <span className={`${step === "upload" ? "text-primary font-bold underline" : ""}`}>Upload</span>
           <span>→</span>
-          <span className={`${step === "detect-members" || step === "unknown-members" ? "text-primary font-bold underline" : ""}`}>Members</span>
+          <span className={`${step === "detect-members" ? "text-primary font-bold underline" : ""}`}>Members</span>
           <span>→</span>
           <span className={`${step === "anomalies-dashboard" || step === "resolve-anomaly" ? "text-primary font-bold underline" : ""}`}>Resolve</span>
           <span>→</span>
