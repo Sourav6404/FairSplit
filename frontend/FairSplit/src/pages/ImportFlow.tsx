@@ -583,7 +583,7 @@ export function ImportFlow() {
               <UserPlus className="text-primary" /> Confirm Group Members & Phone Numbers
             </CardTitle>
             <CardDescription>
-              Verify the group members extracted from the first row of your CSV. You can add phone numbers to allow users to automatically view this group when they register.
+              Verify the group members extracted from the first row of your CSV. You must enter a phone number for each member to proceed.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -607,10 +607,12 @@ export function ImportFlow() {
                       </div>
 
                       <div className="flex items-center gap-2 w-full sm:w-72">
-                        <Label htmlFor={`phone-${member}`} className="text-xs text-muted-foreground shrink-0">Phone:</Label>
+                        <Label htmlFor={`phone-${member}`} className="text-xs text-muted-foreground shrink-0">
+                          Phone <span className="text-red-500">*</span>:
+                        </Label>
                         <Input
                           id={`phone-${member}`}
-                          placeholder={isCreator ? (currentUser?.username || "Your number") : "Optional (e.g. 9876543210)"}
+                          placeholder={isCreator ? (currentUser?.username || "Your number") : "Required (e.g. 9876543210)"}
                           value={memberPhones[member] || ""}
                           disabled={isCreator}
                           onChange={(e) => {
@@ -634,6 +636,7 @@ export function ImportFlow() {
               </Button>
               <Button 
                 onClick={() => setStep("anomalies-dashboard")} 
+                disabled={groupMembers.some(m => !memberPhones[m]?.trim())}
                 className="bg-[#114b30] hover:bg-[#155436] text-white flex items-center gap-2 px-6 rounded-full"
               >
                 Analyze Anomalies <ArrowRight size={16} />
