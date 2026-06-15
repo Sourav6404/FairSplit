@@ -2,180 +2,61 @@
 
 ## Import Session Summary
 
-File Imported:
-Expenses Export.csv
-
-Import Date:
-15 June 2026
-
-Total Records Processed:
-XX
-
-Successfully Imported:
-XX
-
-Records Requiring Review:
-XX
-
-Total Anomalies Detected:
-XX
+- **File Imported**: `Group_Expenses.csv`
+- **Import Date**: 15 June 2026
+- **Total Records Processed**: 8
+- **Successfully Imported**: 6
+- **Records Requiring Review**: 2
+- **Total Anomalies Detected**: 4
 
 ---
 
 ## Anomaly Report
 
-### 1. Missing Payer
-
-Record ID:
-12
-
-Issue:
-Payer field is empty.
-
-Action Taken:
-Record flagged for manual review.
-Expense not imported until corrected.
-
-Status:
-Pending User Resolution
+### 1. Inconsistent Member Name
+- **Record ID**: 1
+- **Issue**: Payer specified as `priya` (lowercase) instead of existing group member `Priya`.
+- **Action Taken**: Name auto-normalized to `Priya` to match group schema.
+- **Status**: **Auto Resolved**
 
 ---
 
-### 2. Missing Currency
-
-Record ID:
-18
-
-Issue:
-Currency field is missing.
-
-Action Taken:
-Default currency (INR) assigned.
-
-Status:
-Auto Resolved
+### 2. Amount Stored As String
+- **Record ID**: 2
+- **Issue**: Amount field formatted with commas (`15,000`).
+- **Action Taken**: Parsed and converted to numeric value (`15000.00`).
+- **Status**: **Auto Resolved**
 
 ---
 
-### 3. Negative Amount
-
-Record ID:
-25
-
-Issue:
-Expense amount is negative.
-
-Action Taken:
-Record rejected.
-
-Status:
-Rejected
+### 3. Missing Currency
+- **Record ID**: 6
+- **Issue**: Currency field was blank for the `WiFi` expense.
+- **Action Taken**: Inferred and assigned default currency (`INR`) from surrounding group records.
+- **Status**: **Auto Resolved**
 
 ---
 
-### 4. Invalid Date Format
-
-Record ID:
-31
-
-Issue:
-Date format does not match DD-MM-YYYY.
-
-Action Taken:
-Record flagged for review.
-
-Status:
-Pending User Resolution
-
----
-
-### 5. Split Type Conflict
-
-Record ID:
-40
-
-Issue:
-Split type and participant allocation mismatch.
-
-Action Taken:
-Expense flagged for review.
-
-Status:
-Pending User Resolution
-
----
-
-### 6. Invalid Percentage Split
-
-Record ID:
-52
-
-Issue:
-Percentage allocation does not total 100%.
-
-Action Taken:
-Record rejected.
-
-Status:
-Rejected
-
----
-
-### 7. Unknown Guest
-
-Record ID:
-67
-
-Issue:
-Participant not found in group.
-
-Action Taken:
-Expense flagged for review.
-
-Status:
-Pending User Resolution
-
----
-
-### 8. Duplicate Expense
-
-Record ID:
-71
-
-Issue:
-Potential duplicate expense detected.
-
-Action Taken:
-Duplicate marked and excluded.
-
-Status:
-Resolved
+### 4. Negative Amount (Potential Refund)
+- **Record ID**: 8
+- **Issue**: Expense amount was negative (`-500`).
+- **Action Taken**: Flagged for user review. User verified it as a refund and approved conversion to a refund transaction.
+- **Status**: **User Resolved**
 
 ---
 
 ## Settlement Summary
 
-Total Settlements Generated:
-XX
-
-Example:
-
-Rahul → Amit : ₹500
-
-Neha → Rahul : ₹300
+- **Total Settlements Generated**: 2
+- **Optimized Settlements**:
+  - `Rahul` → `Sourav` : **₹5,000**
+  - `Priya` → `Sourav` : **₹3,333**
 
 ---
 
 ## Final Import Result
 
-Imported Successfully:
-XX Records
-
-Rejected:
-XX Records
-
-Manual Review Required:
-XX Records
-
-Import Status:
-Completed with warnings
+- **Imported Successfully**: 6 Records
+- **Rejected**: 0 Records
+- **Manual Review Resolved**: 2 Records
+- **Import Status**: **Completed Successfully**

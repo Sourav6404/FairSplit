@@ -1,108 +1,136 @@
-1) Duplicate Expense 
-    row(5&6  Dinner at Marina Bites,dinner-marina bites)
-    ->problem :- duplicate expence with same amount, payer , data and other people.
-      ->solution :- * Flag (when all data are maching withe previce data the flage , and pop up to change the name , cross check the data like date , payer,amount ,discription, other people).
-                    * Require user review.
+# FairSplit Anomaly Detection Scope
 
-2) Inconsistent Member Name
-   Ex:- Priya,priya,Priya S
-    ->problem :-Same person represented with diffrent names.
-      ->solution:- normalize names.
+This document defines the scope of anomalies handled by the FairSplit CSV importer and core engine.
 
-3) Amount Stored As string
-   row:(1,200)
-    ->problem:- contains comma formatting.
-      ->solution:-convert to numeric.
+---
 
-4) High Precision
-   row:(899.995)
-    ->more than two decimal.
-      ->Round to 2 decimal places using standard financial rounding.
+## 1. Duplicate Expense
+- **Example**: Duplicate entries for `Dinner at Marina Bites` on the same date with the same amount, payer, and participants.
+- **Problem**: Accidental double-reporting of the same transaction.
+- **Solution**: Flag the second transaction as a "Likely Duplicate", request user review, and cross-check attributes (date, payer, amount, description, participants).
 
-5) Missing Payer
-    roe:(House cleaning supplies)
-    ->problem:-paid_by is empty.
-      ->solution:- * Import with warning.
-                   * Mark payer as unknown.
+---
 
-6) Settlement Recorded As expence
-    row:(Rohan paid aisha back)
-     ->problem:- looks like settlement instead of expense.
-       ->solution:- convert to settlement transaction.
+## 2. Inconsistent Member Names
+- **Example**: `Priya`, `priya`, and `Priya S` representing the same person.
+- **Problem**: Redundant group members created due to capitalization or formatting variations.
+- **Solution**: Auto-normalize names by trimming whitespace and standardizing casing. Flag ambiguous naming variations for manual verification.
 
-7) Missing Currency
-    row:(15 March)
-     ->problem:-currency missing.
-       ->solution:-*Infer currency from nearby records if confidence is high.
-                   *Otherwise mark currency as UNKNOWN.
-                   *Flag for user review.
+---
 
-8) Negative amount
-   Row:Parasailing refund
-    ->problem:-Negative amount.
-      ->solution:-*Treat as refund transaction.
-                  *Adjust balances accordingly.
-                  *Record decision in import report.
+## 3. Amount Stored as String
+- **Example**: Amount listed as `"₹1,200"` or `"1,200.00"`.
+- **Problem**: Non-numeric formatting preventing financial arithmetic.
+- **Solution**: Parse strings, remove currency symbols and comma separators, and convert to standard decimal values.
 
-9) Ambiguous Date
-    Row:04-05-2026
-     ->problem:-Could be Aprile 5 or may 4.
-      ->solution:-*Flag(ask the user to reacheck).
-                  *Analyse from the previce dates.
+---
 
-10) Invalid date format
-    row(Mar-14)
-     ->problem:-Diffrent date format.
-       ->solution:- Normalize during import.
+## 4. High Precision Amounts
+- **Example**: Expense amount listed as `₹899.995`.
+- **Problem**: Fractional cents that cannot be represented in actual transactions.
+- **Solution**: Round values to two decimal places using standard financial rounding rules.
 
-11) member left Group
-    row:(Meera moved out)
-     ->problem:-later expenses or expenses befor meera left ,or date of mera left may diffrent still expenses include meera.
-       ->solution:- flage,review from user.
+---
 
-12) new member added
-    row:(Sam appears later)
-     ->problem:- member changed over time.
-       ->solution:-Track member history.
+## 5. Missing Payer
+- **Example**: Paid-by field left empty for `House cleaning supplies`.
+- **Problem**: Impossible to attribute debt or credit without a payer.
+- **Solution**: Flag the record, assign a temporary "Unknown" status, and require user allocation or transaction removal before finalizing.
 
-13) Unkown guest
-    row(Dev's friend kabir)
-     ->problem:-Temporary participant not in group.
-       ->Solution:- create Guest participant.
-14) Percentage Split Validation
-    row(pizza friday)
-     ->problem:-Precentages must total 100%.
-       ->solution:-validate before import.
+---
 
-15) Split Type Diffrent
-    row(Furniture for common room)
-     ->problem:-diffrent types of split methods.
-       ->solution:-*Validate the methode(did total adding giving the amount).
-                   *Flage as well.
+## 6. Settlement Recorded as Expense
+- **Example**: Description reads `Rohan paid Aisha back`.
+- **Problem**: Repayment logged as a group expense, leading to distorted group spending metrics.
+- **Solution**: Identify key phrases (e.g., "paid back", "settled") and offer to convert the transaction into a settlement instead of an expense.
 
-16) conflicting duplicate expense
-    row(two record has same description,date,and participants but diffrent payer or amount)
-      ->problem:- The record appear to represent the same expense but contain conflicting informations.
-        ->solution:-*flag.
-                    *User review.
+---
 
-17) Amount is invalid
-    row(amount is zero)
-     ->problem:- Expense amount is zero and does not affect balances.May indicate placeholder data, cancelled transaction, or data entry error.
-       ->solution:-*Flage.
-                   *User review and approve it.
+## 7. Missing Currency
+- **Example**: Record does not specify the currency.
+- **Problem**: Ambiguous amount valuation in multi-currency groups.
+- **Solution**: Infer currency based on surrounding records or default group currency, then flag for user confirmation.
 
-18) Split method error
-    row(split metod is equal but used share)
-    ->problem:- method mention in the splite type is diffrent than the methode used.
-      ->solution:-*Validate that split_details match the declared split_type.
-                  *If mismatch exists, flag record.
-                  *Do not automatically correct the data.
-                  *Require user review.
+---
 
-19) Split amount mismatch
-    row(total amount and spite deataile is diffrent)
-     ->problem:-The sum of individual shares does not match the total expense amount.
-       ->solution:-*Validate share total before import.
-                   *Flag record if totals do not match.
-                   *Require user review.
+## 8. Negative Amount
+- **Example**: Parasailing refund logged as `-500`.
+- **Problem**: Negative expense values can disrupt accounting logic.
+- **Solution**: Classify the record as a refund or credit transaction, adjust group balances, and log the resolution.
+
+---
+
+## 9. Ambiguous Date
+- **Example**: Date format `04-05-2026`.
+- **Problem**: Ambiguity between April 5th and May 4th.
+- **Solution**: Infer the date format from neighboring records in the CSV or prompt the user for clarification.
+
+---
+
+## 10. Invalid Date Format
+- **Example**: Date listed as `Mar-14` or `15/06/26`.
+- **Problem**: Non-ISO date formats causing database insertion errors.
+- **Solution**: Normalize date formats dynamically to the standard `YYYY-MM-DD` representation.
+
+---
+
+## 11. Member Left Group
+- **Example**: Aisha leaves the group, but an expense occurring after her departure includes her.
+- **Problem**: Inactive members being billed for new group expenses.
+- **Solution**: Validate transaction dates against member active periods and flag violations for manual review.
+
+---
+
+## 12. New Member Added
+- **Example**: Sam joins the group mid-trip but is included in early expenses.
+- **Problem**: Members charged for expenses incurred before they joined the group.
+- **Solution**: Validate expense dates against member join dates and exclude members from prior expenses.
+
+---
+
+## 13. Unknown Guest Participants
+- **Example**: Guest `Dev's friend Kabir` added to an expense.
+- **Problem**: Transaction references someone who is not a registered member of the group.
+- **Solution**: Support temporary guest participant records that calculate splits correctly, and allow converting guests to permanent members later.
+
+---
+
+## 14. Percentage Split Validation
+- **Example**: Splits designated as `40%`, `30%`, and `40%` for three participants.
+- **Problem**: Split percentages do not sum to 100%, causing unbalanced splits.
+- **Solution**: Perform pre-import validation and reject or flag records with invalid split totals.
+
+---
+
+## 15. Inconsistent Split Type
+- **Example**: Expense split declared as "equal" but individual custom shares are populated.
+- **Problem**: Contradictory split specifications.
+- **Solution**: Check that split details align with the declared method (equal, share, percentage) and flag mismatches.
+
+---
+
+## 16. Conflicting Duplicate Expense
+- **Example**: Two records share the same description, date, and participants, but have different payers or amounts.
+- **Problem**: High probability of conflicting data entries representing the same expense.
+- **Solution**: Display records side-by-side and require user intervention to select the correct record.
+
+---
+
+## 17. Zero Amount Expense
+- **Example**: Expense amount is zero.
+- **Problem**: The transaction does not affect balances and may represent placeholder data.
+- **Solution**: Flag the zero-amount record for review and allow the user to approve or delete it.
+
+---
+
+## 18. Split Method Errors
+- **Example**: Split details list individual shares that do not match the split type calculation.
+- **Problem**: Internal math discrepancy in split distribution.
+- **Solution**: Require user review and prevent automatic adjustments that could lead to financial errors.
+
+---
+
+## 19. Split Amount Mismatch
+- **Example**: The sum of participant shares does not equal the total expense amount.
+- **Problem**: Unbalanced transaction total.
+- **Solution**: Run validation on import, flag discrepancies, and require user resolution to balance the split details.

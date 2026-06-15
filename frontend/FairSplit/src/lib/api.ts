@@ -1,5 +1,7 @@
+const apiBase = import.meta.env.VITE_API_URL || '';
+
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
-  const url = path.startsWith("/api") ? path : `/api${path}`;
+  const url = path.startsWith("/api") ? `${apiBase}${path}` : `${apiBase}/api${path}`;
   
   const headers = new Headers(options.headers);
   const token = localStorage.getItem("access_token");
@@ -22,7 +24,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     const refreshToken = localStorage.getItem("refresh_token");
     if (refreshToken && path !== "/auth/login/" && path !== "/auth/refresh/") {
       try {
-        const refreshResponse = await fetch("/api/auth/refresh/", {
+        const refreshResponse = await fetch(`${apiBase}/api/auth/refresh/`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

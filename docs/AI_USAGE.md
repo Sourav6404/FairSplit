@@ -5,7 +5,7 @@
 ---
 
 ## 1. AI Tools Used
-- Google DeepMind's **Antigravity IDE assistant** (powering code navigation, command executions, and code adjustments).
+- **Google Gemini & GitHub Copilot** (powering code generation, code navigation, and basic code suggestions).
 
 ---
 

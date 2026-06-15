@@ -1,114 +1,151 @@
-1) Duplicate
-    Decision:-the importer automatically detects exact duplicates and marks them as"Likely Duplicate"
-    Action :-*show them in the import report.
-             *Recommend removal.
-             *Allow the user to approve the removal
-    Reason:-Exact duplicates are highly likely to be accidental but financial records should not be silently deleted.
+# FairSplit Architectural & Design Decisions
 
-2) Conflicting Expense
-    Decision:-The importer detects records that have the same data and description and participants but diffrent amount,payers.
-    Action :-*Mark the record as Potential Conflict.
-             *Display the conflicting records side-by-side in the import report.
-             *Require user review before import is finalized.
-             *Do not merge,modify,or delete either record automatically.
-    Reason :- Matching descriptions and dates suggest the records may refer to the same expense, but conflicting financial details make automatic correction unreliable. User review is required to preserve data accuracy.
+This document outlines the architectural decisions and resolution strategies implemented in the FairSplit import engine.
 
-3) Inconsistent Member names
-    Decision:-The importer identifies names that differ only in capitalization, spacing, or formatting.
-    Action:-*Normalize names by trimming spaces and converting to a standard format.
-            *Log all name transformations in the import report.
-            *Flag ambiguous cases (e.g., "Priya" vs "Priya S") for review.
-    Reason:-Consistent naming improves data quality and prevents duplicate member records.
+---
 
-4) Amount Stored as String
-    Decision:-The importer detects amounts stored as formatted strings.
-    Action :-*Remove formatting characters such as commas and currency symbols.
-             *Convert values into numeric format.
-             *Log conversions in the import report.
-    Reason:-Financial calculations require standardized numeric values.
+## 1. Duplicate Expenses
+* **Decision**: The importer automatically detects exact duplicates and marks them as `"Likely Duplicate"`.
+* **Action**: 
+  - Display them clearly in the import report.
+  - Recommend removal of the redundant record.
+  - Allow the user to manually approve the exclusion or import.
+* **Rationale**: Exact duplicate entries are highly likely to be accidental double-clicks or import overlaps, but financial records should never be silently deleted without user confirmation.
 
-5) High Precision Amounts
-    Decision:-The importer detects monetary values with more than two decimal places.
-    Action :-*Round to two decimal places using standard financial rounding rules.
-             *Record the original and adjusted values in the import report.
-    Reason:-Currency values should be stored using standard monetary precision.
+---
 
-6) Missing Payer
-    Decision:-The importer detects expenses where the payer is not specified.
-    Action:-*Import the record with a warning.
-            *Mark the payer as Unknown.
-            *Allow the user to assign a payer later or remove the transaction.
-            *Exclude the expense from settlement calculations until resolved.
-    Reason:-Incorrect payer information can result in inaccurate balances.
+## 2. Conflicting Expenses
+* **Decision**: Detect records sharing the same date, description, and participants, but with differing amounts or payers.
+* **Action**:
+  - Mark the record as a `"Potential Conflict"`.
+  - Display the conflicting records side-by-side in the UI.
+  - Require explicit user selection before finalizing the import.
+* **Rationale**: Matching descriptions and dates strongly suggest they represent the same real-world expense, but conflicting financial values mean automatic resolution is prone to error.
 
-7) Settlement Recorded as Expense
-    Decision:-The importer detects transactions that appear to be repayments rather than expenses.
-    Action :-*Classify the record as a settlement transaction.
-             *Store it separately from expenses.
-             *Log the conversion in the import report.
-    Reason:-Settlements affect balances but are not expenses.
+---
 
-8) Missing Currency
-    Decision:-The importer detects records with missing currency information.
-    Action:-*Attempt to infer the currency from surrounding records.
-            *Display the inferred currency to the user for confirmation.
-            *Flag the record if confidence is low.
-            *Record assumptions in the import report.
-    Reason:-Currency is required for accurate financial calculations.
+## 3. Inconsistent Member Names
+* **Decision**: Normalize member names that differ only in capitalization, spacing, or trailing characters.
+* **Action**:
+  - Automatically trim leading/trailing whitespace and normalize string casing.
+  - Log name corrections in the import report.
+  - Flag ambiguous cases (e.g., `"Priya"` vs. `"Priya S"`) for user verification.
+* **Rationale**: Standardizing naming prevents duplicate member profiles in the group database and ensures correct historical balance calculation.
 
-9) Negative Amounts
-    Decision:-The importer detects expenses with negative values.
-    Action:-*Treat clearly identified refunds as refund transactions.
-            *Adjust balances accordingly.
-            *Flag ambiguous cases for review.
-    Reason:-Negative values may represent refunds rather than spending.
+---
 
-10) Ambiguous Dates
-     Decision:-The importer detects dates that can be interpreted in multiple formats.
-     Action:-*Attempt format inference using surrounding records.
-             *Flag uncertain cases for user review.
-             *Record the selected interpretation in the import report.
-    Reason:-Incorrect dates can affect balance calculations and membership validation.
+## 4. Amount Stored as String
+* **Decision**: Automatically extract numeric amounts from formatted strings.
+* **Action**:
+  - Strip formatting characters (commas, currency symbols).
+  - Convert strings into standard float/decimal types.
+  - Log the parsing conversion in the import report.
+* **Rationale**: Core split mathematics and database stores require standardized float/decimal datatypes.
 
-11) Invalid Date Formats
-     Decision:-The importer detects dates that do not match the standard format.
-     Action:-*Convert supported formats into the application's standard date format.
-             *Record all conversions in the import report.
-     Reason:-Consistent date formatting simplifies processing and reporting.
+---
 
-12) Member Left Group
-     Decision:-The importer validates expenses against member join and leave dates.
-     Action:-*Compare expense dates with member join and leave dates.
-             *Flag expenses that include inactive members.
-             *Require user review before final import.
-     Reason:-Members should only participate in expenses during their active membership period.
+## 5. High Precision Amounts
+* **Decision**: Standardize currency calculations to avoid floating-point inaccuracies.
+* **Action**:
+  - Round all monetary shares to exactly two decimal places using standard financial rounding rules (half-up).
+  - Record the original and rounded values.
+* **Rationale**: Storing fractional cents is incompatible with currency systems and causes rounding mismatches during settlements.
 
-13) New Member Added
-     Decision:- The importer tracks membership changes over time.
-     Action:-*Store join dates for new members.
-             *Exclude members from expenses occurring before they joined.
-     Reason:-Balances should reflect actual participation history.
+---
 
-14) Unknown Guest Participants
-     Decision:-The importer detects participants who are not registered group members.
-     Action:-*Create a temporary guest participant record.
-             *Include guests in expense calculations.
-             *Mark guests separately from permanent members.
-             *Record guest participation in the import report.
-             *Allow the user to convert a guest into a permanent member later if needed.
-     Reason:-Group expenses may legitimately include non-members, such as friends, visitors, or temporary participants, who should still be included in expense calculations.
+## 6. Missing Payer
+* **Decision**: Prevent unallocated transactions while keeping the CSV import flow non-blocking.
+* **Action**:
+  - Import the transaction with a warning state.
+  - Mark the payer as `"Unknown"`.
+  - Exclude the transaction from group settlements until the user assigns a valid payer.
+* **Rationale**: Settlement calculations require a valid payer to determine who is owed money; keeping the record allows the user to repair it without starting the import over.
 
-15) Percentage Split Validation
-     Decision:-The importer validates percentage-based expense splits.
-     Action:-*Verify that percentages total 100%.
-             *Flag invalid records.
-             *Allow the user to correct percentage values before import.
-             *Prevent automatic import of incorrect splits.
-     Reason:-Incorrect percentages produce inaccurate balances.
+---
 
-16) Split Type Conflict
-     Decision:-The importer detects conflicts between split_type and split_details.
-     Action:-*Validate split calculations.
-             *Flag inconsistencies.
-             *Require user review before processing.
-     Reason:-Conflicting split information can result in incorrect debt calculations.
+## 7. Settlement Recorded as Expense
+* **Decision**: Differentiate between group spending (expenses) and debt repayment (settlements).
+* **Action**:
+  - Detect keyword patterns (e.g., "paid back", "repaid").
+  - Reclassify the record as a settlement transaction and process it separately.
+* **Rationale**: Classifying repayments as expenses distorts group spending metrics and creates circular debts.
+
+---
+
+## 8. Missing Currency
+* **Decision**: Deduce missing currencies intelligently.
+* **Action**:
+  - Infer the currency by matching surrounding rows in the CSV session or the group's default currency.
+  - Flag the record for verification if confidence is low.
+* **Rationale**: Financial integrity requires explicit currencies for accurate conversions.
+
+---
+
+## 9. Negative Amounts
+* **Decision**: Support negative values as credit/refund adjustments.
+* **Action**:
+  - Classify negative values as refund transactions.
+  - Deduct the amount from participant balances and adjust group totals.
+* **Rationale**: Negative entries usually represent partial or full refunds, which need to reduce overall group debt rather than increase it.
+
+---
+
+## 10. Ambiguous Dates
+* **Decision**: Safely resolve dates written in ambiguous formats (e.g., `04/05/2026`).
+* **Action**:
+  - Infer format preferences (DD/MM/YYYY vs. MM/DD/YYYY) by checking date boundaries across other records.
+  - Flag unclear dates for explicit user confirmation.
+* **Rationale**: Incorrect transaction ordering affects interest, membership timelines, and audit trails.
+
+---
+
+## 11. Invalid Date Formats
+* **Decision**: Convert all non-standard date formats to ISO format.
+* **Action**:
+  - Parse multiple common formats (e.g., `Mar-14`, `15/06/2026`) and convert them to `YYYY-MM-DD`.
+* **Rationale**: Restricting database storage to standard ISO dates simplifies querying, ordering, and visualization.
+
+---
+
+## 12. Member Left Group
+* **Decision**: Prevent charging inactive members.
+* **Action**:
+  - Compare expense dates against group membership periods.
+  - Flag transactions billing members who had already left the group.
+* **Rationale**: Ensures members are only charged for expenses incurred during their active involvement.
+
+---
+
+## 13. New Member Added
+* **Decision**: Prevent retroactive charging of new members.
+* **Action**:
+  - Exclude members from expenses occurring prior to their group join date.
+* **Rationale**: Charging members for historic expenses they did not participate in is financially incorrect.
+
+---
+
+## 14. Unknown Guest Participants
+* **Decision**: Allow external participants without forcing permanent membership.
+* **Action**:
+  - Register external names as guest profiles.
+  - Include guests in the split math.
+  - Offer the user a quick option to promote guests to full members.
+* **Rationale**: Expenses often involve visitors or temporary participants who should be factored into splits but not added to the permanent group roster.
+
+---
+
+## 15. Percentage Split Validation
+* **Decision**: Enforce strict boundary checks on percentage splits.
+* **Action**:
+  - Validate that split percentages total exactly 100%.
+  - Flag and block imports of unbalanced percentage records until resolved by the user.
+* **Rationale**: Unbalanced percentages lead to missing or duplicate currency fractions.
+
+---
+
+## 16. Split Type Conflicts
+* **Decision**: Identify mismatch anomalies between designated split type and details.
+* **Action**:
+  - Validate math consistency across all split modes.
+  - Require manual resolution if split details contradict the split type.
+* **Rationale**: Resolving split details using conflicting rules creates mathematical errors.
