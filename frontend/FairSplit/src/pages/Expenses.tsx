@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { User } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
 
@@ -86,22 +86,40 @@ export function Expenses() {
     const chartData = Array.from({ length: 6 }).map((_, i) => {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      return { month: months[d.getMonth()], monthIdx: d.getMonth(), amount: 0 };
+      return { month: months[d.getMonth()], monthIdx: d.getMonth(), totalAmount: 0, personalAmount: 0 };
     }).reverse();
 
     if (!currentUser || !groups.length || !expenses.length) {
       return chartData;
     }
 
-    const userGroupIds = new Set(groups.map((g: any) => g.id));
+    const userGroupIds = new Set(groups.map((g: any) => Number(g.id)));
+
+    const myMemberIdsByGroupId = new Map<number, number>();
+    groups.forEach((g: any) => {
+      const myMember = g.members?.find((m: any) => Number(m.user_id) === Number(currentUser.id));
+      if (myMember) {
+        myMemberIdsByGroupId.set(Number(g.id), Number(myMember.id));
+      }
+    });
 
     expenses.forEach((exp: any) => {
-      if (userGroupIds.has(exp.group)) {
-        const amount = Number(exp.amount || 0);
+      const groupId = Number(exp.group);
+      if (userGroupIds.has(groupId)) {
+        const totalAmountVal = Number(exp.amount || 0);
+
+        let personalAmountVal = 0;
+        const myMemberId = myMemberIdsByGroupId.get(groupId);
+        if (myMemberId !== undefined) {
+          const part = exp.participants?.find((p: any) => Number(p.member) === myMemberId);
+          if (part) {
+            personalAmountVal = Number(part.share_amount || 0);
+          }
+        }
         
         let dateObj: Date | null = null;
         if (exp.expense_date) {
-          const parts = exp.expense_date.split('-');
+          const parts = exp.expense_date.split(/[-/]/);
           if (parts.length === 3) {
             if (parts[0].length === 4) {
               dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
@@ -115,13 +133,14 @@ export function Expenses() {
           const mIdx = dateObj.getMonth();
           const bucket = chartData.find(item => item.monthIdx === mIdx);
           if (bucket) {
-            bucket.amount += amount;
+            bucket.totalAmount += totalAmountVal;
+            bucket.personalAmount += personalAmountVal;
           }
         }
       }
     });
 
-    return chartData.map(({ month, amount }) => ({ month, amount }));
+    return chartData.map(({ month, totalAmount, personalAmount }) => ({ month, totalAmount, personalAmount }));
   }, [currentUser, groups, expenses]);
 
   // Helper to determine bar color based on amount (shades of green)
@@ -236,18 +255,15 @@ export function Expenses() {
             <h3 className="font-bold text-gray-900 mb-6">Past Months Expenses</h3>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={expenseData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                 <BarChart data={expenseData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 12}} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 12}} tickFormatter={(val) => `₹${val}`} />
                   <Tooltip 
-                    cursor={{fill: '#f3f4f6'}} 
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Bar dataKey="amount" radius={[6, 6, 6, 6]} barSize={40}>
-                    {expenseData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={getBarColor(entry.amount)} />
-                    ))}
-                  </Bar>
+                  <Legend verticalAlign="top" height={36} iconType="circle" />
+                  <Bar dataKey="totalAmount" name="Total Group Expenses" fill="#114b30" radius={[4, 4, 4, 4]} barSize={16} />
+                  <Bar dataKey="personalAmount" name="Your Personal Share" fill="#22c55e" radius={[4, 4, 4, 4]} barSize={16} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
