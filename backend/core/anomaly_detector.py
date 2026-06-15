@@ -1,6 +1,16 @@
 
 import re
-from decimal import Decimal,ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP
+
+def safe_float(value, default=0):
+    """Convert a value to float, stripping commas and currency symbols."""
+    if value is None:
+        return default
+    try:
+        cleaned = re.sub(r"[^0-9.\-]", "", str(value).replace(",", ""))
+        return float(cleaned) if cleaned else default
+    except (ValueError, TypeError):
+        return default
 
 def normalize_amount(amount):
     if amount is None:
@@ -97,7 +107,7 @@ def detect_negative_amount(expense):
     if amount is None:
         return None
     try:
-        amount = float(amount)
+        amount = safe_float(amount)
     except Exception:
         return None
     if amount >= 0:
@@ -249,8 +259,37 @@ def detect_unknown_guest(expense, group_members):
             "expense": expense
         }
     return None
+import json
+
+def safe_split_details(value):
+    """Safely parse split_details from a CSV field (string or dict) into a dict."""
+    if isinstance(value, dict):
+        return value
+    if not value or str(value).strip() == "":
+        return {}
+    # Try JSON
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            return parsed
+    except (ValueError, TypeError):
+        pass
+    # Try key:value pairs e.g. "Alice:50,Bob:50"
+    result = {}
+    for pair in str(value).split(","):
+        if ":" in pair:
+            k, v = pair.split(":", 1)
+            result[k.strip()] = v.strip()
+    return result
+
 def detect_invalid_percentage_split(expense):
-    split_details = expense.get("split_details", {})
+    split_type = str(expense.get("split_type", "")).strip().lower()
+    # Only validate percentage splits
+    if split_type != "percentage":
+        return None
+    split_details = safe_split_details(expense.get("split_details", {}))
+    if not split_details:
+        return None
     total_percentage = 0
     for percentage in split_details.values():
         try:
@@ -278,13 +317,11 @@ def detect_split_type_conflict(expense):
     split_type = str(
         expense.get("split_type", "")
     ).strip().lower()
-    split_details = expense.get(
-        "split_details",
-        {}
-    )
-    amount = float(
-        expense.get("amount", 0)
-    )
+    # Equal splits don't require split_details — skip
+    if split_type in ("", "equal"):
+        return None
+    split_details = safe_split_details(expense.get("split_details", {}))
+    amount = safe_float(expense.get("amount", 0))
     if split_type == "custom":
         split_total = 0
         for value in split_details.values():
@@ -438,16 +475,7 @@ def detect_conflicting_expense(
     return None
 def detect_multiple_currencies(expenses):
     currencies = {}
-    max_count = max(
-    currencies.values()
-)
 
-    major_currencies = [
-        currency
-        for currency, count
-        in currencies.items()
-        if count == max_count
-    ]
     for expense in expenses:
         currency = (
             str(
@@ -470,6 +498,17 @@ def detect_multiple_currencies(expenses):
         )
     if len(currencies) <= 1:
         return None
+        
+    max_count = max(
+        currencies.values()
+    )
+
+    major_currencies = [
+        currency
+        for currency, count
+        in currencies.items()
+        if count == max_count
+    ]
     majority_currency = max(
         currencies,
         key=currencies.get

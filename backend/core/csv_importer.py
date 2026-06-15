@@ -65,9 +65,10 @@ class CSVImporter:
                     major_currency
                 ):
 
+                    clean_amount = str(expense["amount"]).replace(",", "")
                     conversion = (
                         converter.convert(
-                            amount=expense["amount"],
+                            amount=clean_amount,
                             from_currency=current_currency,
                             to_currency=major_currency,
                             date=expense["date"]

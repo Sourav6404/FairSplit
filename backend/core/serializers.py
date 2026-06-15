@@ -9,10 +9,15 @@ from .models import (
     ImportAnomaly
 )
 class GroupSerializer(serializers.ModelSerializer):
+    members = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
         fields = "__all__"
+
+    def get_members(self, obj):
+        # We need to fetch the member details. We can just return basic member info or use MemberSerializer.
+        return [{"id": m.id, "name": m.name, "email": m.email} for m in obj.members.all()]
 class MemberSerializer(serializers.ModelSerializer):
 
     class Meta:
