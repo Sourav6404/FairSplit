@@ -357,12 +357,24 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                         split_type=split_type if split_type in ["equal", "percentage", "exact"] else "equal"
                     )
 
-                    participant_members = [
-                        phone_to_member[p] for p in participants_phones
-                        if p in phone_to_member
-                    ]
+                    participants_phones = exp.get("participants_phones", [])
+                    participants_names = exp.get("participants_names", [])
+
+                    participant_members = []
+                    for p in participants_phones:
+                        p_str = str(p).strip()
+                        if p_str and p_str in phone_to_member:
+                            participant_members.append(phone_to_member[p_str])
+
+                    for name in participants_names:
+                        name_lower = str(name).strip().lower()
+                        if name_lower and name_lower in name_to_member:
+                            mem_obj = name_to_member[name_lower]
+                            if mem_obj not in participant_members:
+                                participant_members.append(mem_obj)
+
                     if not participant_members:
-                        # No specific phones given → include ALL group members
+                        # No specific phones/names given → include ALL group members
                         participant_members = list(all_members)
 
                     if expense.split_type == "equal":
@@ -376,7 +388,13 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                     elif expense.split_type == "exact":
                         share_amounts = exp.get("share_amounts", {})
                         for mem in participant_members:
-                            share = Decimal(str(share_amounts.get(mem.phone, amount / len(participant_members))))
+                            # Try to get by phone first, then by name, then default to equal
+                            val = share_amounts.get(mem.phone) if mem.phone else None
+                            if val is None:
+                                val = share_amounts.get(mem.name)
+                            if val is None:
+                                val = amount / len(participant_members)
+                            share = Decimal(str(val))
                             ExpenseParticipant.objects.create(
                                 expense=expense,
                                 member=mem,
