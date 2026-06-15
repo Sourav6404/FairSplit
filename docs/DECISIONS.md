@@ -91,11 +91,12 @@ This document outlines the architectural decisions and resolution strategies imp
 ---
 
 ## 10. Ambiguous Dates
-* **Decision**: Safely resolve dates written in ambiguous formats (e.g., `04/05/2026`).
+* **Decision**: Safely resolve dates written in ambiguous formats (e.g., `04/05/2026`) based on chronological sequence flow.
 * **Action**:
-  - Infer format preferences (DD/MM/YYYY vs. MM/DD/YYYY) by checking date boundaries across other records.
-  - Flag unclear dates for explicit user confirmation.
-* **Rationale**: Incorrect transaction ordering affects interest, membership timelines, and audit trails.
+  - Check if the date is a candidate for ambiguity (day <= 12, month <= 12, and day != month).
+  - Verify if the month chronological sequence flow is out of order compared to neighboring records.
+  - Flag matches for manual selection between DD-MM-YYYY and MM-DD-YYYY.
+* **Rationale**: Ambiguous dates should only be flagged if they break the chronological flow of transactions, avoiding unnecessary alerts on ordered dates.
 
 ---
 
@@ -149,3 +150,12 @@ This document outlines the architectural decisions and resolution strategies imp
   - Validate math consistency across all split modes.
   - Require manual resolution if split details contradict the split type.
 * **Rationale**: Resolving split details using conflicting rules creates mathematical errors.
+
+---
+
+## 17. Group Deletion
+* **Decision**: Provide user control to permanently delete groups.
+* **Action**:
+  - Implement a delete dialog confirmation on the Group Details screen.
+  - On approval, cascade delete all group memberships, expenses, participants, and settlements.
+* **Rationale**: Enables users to clean up their dashboard by removing completed or draft groups, maintaining clean database storage.
