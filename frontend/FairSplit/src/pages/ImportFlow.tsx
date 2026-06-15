@@ -141,10 +141,6 @@ export function ImportFlow() {
     const seen = new Set<string>();
     const memberSetLower = new Set(members.map(m => m.toLowerCase()));
 
-    // Check for similar names among group members
-    for (let i = 0; i < members.length; i++) {
-      for (let j = i + 1; j < members.length; j++) {
-        const n1 = members[i];
     // Helper to safely compare DD-MM-YYYY strings in JS Date
     const parseDDMMYYYY = (dateStr: string): Date => {
       const dparts = dateStr.split(/[-/]/);
@@ -705,17 +701,189 @@ export function ImportFlow() {
 
     // Propagate fixes to parsedExpenses
     const updatedExpenses = [...parsedExpenses];
+    
+    // Find index of the expense if it relates to a specific transaction
     const expIdx = parsedExpenses.findIndex(
-      e => e.description === anomaly.expenseName && e.amount === anomaly.data.amount
+      e => e.description === anomaly.expenseName && 
+           (anomaly.data && anomaly.data.amount !== undefined ? e.amount === anomaly.data.amount : true)
     );
 
-    if (expIdx !== -1) {
-      if (anomaly.type === "missing_payer") {
+    // 1. Missing Payer
+    if (anomaly.type === "missing_payer") {
+      if (expIdx !== -1) {
         updatedExpenses[expIdx].paid_by_name = payerSelection;
-      } else if (anomaly.type === "missing_currency") {
+      }
+    }
+    // 2. Missing Currency
+    else if (anomaly.type === "missing_currency") {
+      if (expIdx !== -1) {
         updatedExpenses[expIdx].currency = currencySelection;
-      } else if (anomaly.type === "negative_amount" && decisionText.toLowerCase().includes("positive")) {
+      }
+    }
+    // 3. Negative Amount
+    else if (anomaly.type === "negative_amount") {
+      if (expIdx !== -1 && decisionText.toLowerCase().includes("positive")) {
         updatedExpenses[expIdx].amount = Math.abs(updatedExpenses[expIdx].amount);
+      }
+    }
+    // 4. Duplicate
+    else if (anomaly.type === "duplicate") {
+      if (decisionText.toLowerCase().includes("remove") && expIdx !== -1) {
+        updatedExpenses.splice(expIdx, 1);
+      }
+    }
+    // 5. Conflict
+    else if (anomaly.type === "conflict") {
+      if (decisionText.toLowerCase().includes("first") && expIdx !== -1) {
+        updatedExpenses.splice(expIdx, 1);
+      } else if (decisionText.toLowerCase().includes("second")) {
+        const firstIdx = updatedExpenses.findIndex(
+          (e, idx) => idx < expIdx && e.description === anomaly.expenseName && e.amount === anomaly.data.amountA
+        );
+        if (firstIdx !== -1) {
+          updatedExpenses.splice(firstIdx, 1);
+        }
+      }
+    }
+    // 6. Similar Names (Member Confusion)
+    else if (anomaly.type === "similar_names") {
+      const name1 = anomaly.data.name1; // group member (e.g. "Priya")
+      const name2 = anomaly.data.name2; // CSV name (e.g. "Priya S")
+      if (decisionText.toLowerCase().includes("merge")) {
+        // Rename name2 to name1 in all expenses
+        updatedExpenses.forEach(exp => {
+          if (exp.paid_by_name && exp.paid_by_name.toLowerCase() === name2.toLowerCase()) {
+            exp.paid_by_name = name1;
+          }
+          if (exp.participants_names) {
+            exp.participants_names = exp.participants_names.map(p => 
+              p.toLowerCase() === name2.toLowerCase() ? name1 : p
+            );
+          }
+          if (exp.share_amounts && exp.share_amounts[name2] !== undefined) {
+            const val = exp.share_amounts[name2];
+            delete exp.share_amounts[name2];
+            exp.share_amounts[name1] = (exp.share_amounts[name1] || 0) + val;
+          }
+        });
+      } else {
+        // Keep separate -> Add name2 to groupMembers so it's a valid member
+        if (!groupMembers.includes(name2)) {
+          setGroupMembers(prev => [...prev, name2]);
+          setMemberPhones(prev => ({ ...prev, [name2]: "" }));
+        }
+      }
+    }
+    // 7. Unknown User (Guest)
+    else if (anomaly.type === "unknown_guest") {
+      const guestName = anomaly.data.name;
+      if (decisionText.toLowerCase().includes("guest") || decisionText.toLowerCase().includes("member")) {
+        if (!groupMembers.includes(guestName)) {
+          setGroupMembers(prev => [...prev, guestName]);
+          setMemberPhones(prev => ({ ...prev, [guestName]: "" }));
+        }
+      } else if (decisionText.toLowerCase().includes("remove")) {
+        updatedExpenses.forEach(exp => {
+          if (exp.paid_by_name && exp.paid_by_name.toLowerCase() === guestName.toLowerCase()) {
+            exp.paid_by_name = "";
+          }
+          if (exp.participants_names) {
+            exp.participants_names = exp.participants_names.filter(p => p.toLowerCase() !== guestName.toLowerCase());
+          }
+          if (exp.share_amounts) {
+            delete exp.share_amounts[guestName];
+            Object.keys(exp.share_amounts).forEach(k => {
+              if (k.toLowerCase() === guestName.toLowerCase()) {
+                delete exp.share_amounts![k];
+              }
+            });
+          }
+        });
+      }
+    }
+    // 8. Zero Amount
+    else if (anomaly.type === "zero_amount") {
+      if (decisionText.toLowerCase().includes("remove") && expIdx !== -1) {
+        updatedExpenses.splice(expIdx, 1);
+      }
+    }
+    // 9. High Precision
+    else if (anomaly.type === "high_precision") {
+      if (decisionText.toLowerCase().includes("round") && expIdx !== -1) {
+        const val = updatedExpenses[expIdx].amount;
+        updatedExpenses[expIdx].amount = Math.round(val * 100) / 100;
+        if (updatedExpenses[expIdx].share_amounts) {
+          const sh = updatedExpenses[expIdx].share_amounts!;
+          Object.keys(sh).forEach(k => {
+            sh[k] = Math.round(sh[k] * 100) / 100;
+          });
+        }
+      }
+    }
+    // 10. Inconsistent Split Type
+    else if (anomaly.type === "inconsistent_split_type") {
+      if (expIdx !== -1) {
+        if (decisionText.toLowerCase().includes("equally")) {
+          updatedExpenses[expIdx].split_type = "equal";
+          updatedExpenses[expIdx].share_amounts = {};
+        } else {
+          updatedExpenses[expIdx].split_type = "exact";
+        }
+      }
+    }
+    // 11. Split Conflict
+    else if (anomaly.type === "split_conflict") {
+      if (decisionText.toLowerCase().includes("auto") && expIdx !== -1) {
+        const exp = updatedExpenses[expIdx];
+        if (exp.share_amounts) {
+          const names = Object.keys(exp.share_amounts);
+          if (names.length > 0) {
+            const equalShare = Math.round((exp.amount / names.length) * 100) / 100;
+            let sumShares = 0;
+            names.forEach(k => {
+              exp.share_amounts![k] = equalShare;
+              sumShares += equalShare;
+            });
+            const diff = Math.round((exp.amount - sumShares) * 100) / 100;
+            if (diff !== 0) {
+              exp.share_amounts![names[0]] = Math.round((exp.share_amounts![names[0]] + diff) * 100) / 100;
+            }
+          }
+        }
+      }
+    }
+    // 12. Multiple Currencies
+    else if (anomaly.type === "multiple_currencies") {
+      if (decisionText.toLowerCase().includes("convert")) {
+        updatedExpenses.forEach(exp => {
+          if (exp.currency && exp.currency !== "INR") {
+            const rate = exp.currency === "USD" ? 83 : (exp.currency === "EUR" ? 90 : 1.0);
+            exp.amount = Math.round(exp.amount * rate * 100) / 100;
+            if (exp.share_amounts) {
+              Object.keys(exp.share_amounts).forEach(k => {
+                exp.share_amounts![k] = Math.round(exp.share_amounts![k] * rate * 100) / 100;
+              });
+            }
+            exp.currency = "INR";
+          }
+        });
+      }
+    }
+    // 13. Member Left Group / Join Violation
+    else if (anomaly.type === "member_left_group" || anomaly.type === "member_join_violation") {
+      if (decisionText.toLowerCase().includes("remove") && expIdx !== -1) {
+        const name = anomaly.data.name;
+        updatedExpenses[expIdx].participants_names = updatedExpenses[expIdx].participants_names.filter(
+          p => p.toLowerCase() !== name.toLowerCase()
+        );
+        if (updatedExpenses[expIdx].share_amounts) {
+          delete updatedExpenses[expIdx].share_amounts![name];
+          Object.keys(updatedExpenses[expIdx].share_amounts!).forEach(k => {
+            if (k.toLowerCase() === name.toLowerCase()) {
+              delete updatedExpenses[expIdx].share_amounts![k];
+            }
+          });
+        }
       }
     }
 
