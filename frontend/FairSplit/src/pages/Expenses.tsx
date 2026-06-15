@@ -1,26 +1,48 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { User } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiFetch } from "@/lib/api";
 
 export function Expenses() {
+  const [stats, setStats] = useState<any>({ pending_balance: 0, total_expenses_owed: 0, personal_expense: 0 });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const statsData = await apiFetch("/dashboard/");
+        setStats(statsData);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchStats();
+  }, []);
+
   // Mock data matching the dashboard totals (Get: 4250, Owe: 850)
-  const expensesList = [
+  const expensesList = stats.personal_expense > 0 || stats.pending_balance > 0 ? [
     { id: 1, name: "Rahul Sharma", amount: 2000, type: "get", group: "Goa Trip" },
     { id: 2, name: "Priya Patel", amount: 1500, type: "get", group: "Roommates" },
     { id: 3, name: "Amit Kumar", amount: 750, type: "get", group: "Goa Trip" },
     { id: 4, name: "Sneha Gupta", amount: 500, type: "owe", group: "Office Lunch" },
     { id: 5, name: "Vikram Singh", amount: 350, type: "owe", group: "Roommates" },
-  ];
+  ] : [];
 
   // Chart data for past months expenses
-  const expenseData = [
+  const expenseData = stats.personal_expense > 0 ? [
     { month: "Jan", amount: 1200 },
     { month: "Feb", amount: 2500 },
     { month: "Mar", amount: 800 },
     { month: "Apr", amount: 3500 },
     { month: "May", amount: 1500 },
     { month: "Jun", amount: 4200 },
+  ] : [
+    { month: "Jan", amount: 0 },
+    { month: "Feb", amount: 0 },
+    { month: "Mar", amount: 0 },
+    { month: "Apr", amount: 0 },
+    { month: "May", amount: 0 },
+    { month: "Jun", amount: 0 },
   ];
 
   // Helper to determine bar color based on amount (shades of green)
