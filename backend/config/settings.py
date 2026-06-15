@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-development-key-1234567890")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -79,10 +79,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+db_url = os.getenv("DATABASE_URL")
+if not db_url:
+    sqlite_path = os.getenv("SQLITE_DB_PATH", str(BASE_DIR / 'db.sqlite3'))
+    db_url = f"sqlite:///{sqlite_path}"
+
 DATABASES = {
-    "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
-    )
+    "default": dj_database_url.config(default=db_url)
 }
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
