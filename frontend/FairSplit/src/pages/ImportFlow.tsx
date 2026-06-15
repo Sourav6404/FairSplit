@@ -502,12 +502,22 @@ export function ImportFlow() {
       }
 
       // 14. Ambiguous Date Check (Only triggered when the month sequence flow is out of order)
+      let isAmbiguous = false;
+      const parts = rawDate.split(/[-/]/);
+      if (parts.length === 3 && parts[0].length !== 4) {
+        const p1 = parseInt(parts[0]);
+        const p2 = parseInt(parts[1]);
+        if (!isNaN(p1) && !isNaN(p2) && p1 <= 12 && p2 <= 12 && p1 !== p2) {
+          isAmbiguous = true;
+        }
+      }
+
       let neighborMismatch = false;
       let prevMonth = "";
       let nextMonth = "";
       let detailsMsg = "";
 
-      if (idx > 0 && idx < expenses.length - 1) {
+      if (isAmbiguous && idx > 0 && idx < expenses.length - 1) {
         const prevExp = expenses[idx - 1];
         const nextExp = expenses[idx + 1];
         prevMonth = prevExp.expense_date.split("-")[1];
@@ -521,16 +531,16 @@ export function ImportFlow() {
           if (!isNaN(pm) && !isNaN(nm) && !isNaN(cm)) {
             if (pm === nm && cm !== pm) {
               neighborMismatch = true;
-              detailsMsg = `Date '${rawDate}' has month different from neighboring months (which are both ${prevMonth}).`;
+              detailsMsg = `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`;
             } else if (!((cm >= pm && cm <= nm) || (cm >= nm && cm <= pm))) {
               neighborMismatch = true;
-              detailsMsg = `Date '${rawDate}' has month out of chronological order (previous month: ${prevMonth}, next month: ${nextMonth}).`;
+              detailsMsg = `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`;
             }
           }
         }
       }
 
-      if (neighborMismatch) {
+      if (isAmbiguous && neighborMismatch) {
         detected.push({
           id: `ANOM-DATEAMB-${idx}`,
           type: "ambiguous_date",
@@ -990,6 +1000,17 @@ export function ImportFlow() {
               delete updatedExpenses[expIdx].share_amounts![k];
             }
           });
+        }
+      }
+    }
+    // 14. Ambiguous Date
+    else if (anomaly.type === "ambiguous_date") {
+      if (expIdx !== -1) {
+        if (decisionText.includes("MM-DD-YYYY")) {
+          const parts = updatedExpenses[expIdx].expense_date.split("-");
+          if (parts.length === 3) {
+            updatedExpenses[expIdx].expense_date = `${parts[1]}-${parts[0]}-${parts[2]}`;
+          }
         }
       }
     }
