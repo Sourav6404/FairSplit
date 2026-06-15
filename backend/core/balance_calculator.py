@@ -75,8 +75,12 @@ class BalanceCalculator:
             )
             settlements.append(
                     {
-                        "payer": Member.objects.get(id=debtor_id).name,
-                        "receiver": Member.objects.get(id=creditor_id).name,
+                        "payer_id": debtor_id,
+                        "payer_name": Member.objects.get(id=debtor_id).name,
+                        "payer_phone": Member.objects.get(id=debtor_id).phone,
+                        "receiver_id": creditor_id,
+                        "receiver_name": Member.objects.get(id=creditor_id).name,
+                        "receiver_phone": Member.objects.get(id=creditor_id).phone,
                         "amount": settlement_amount
                     }
                 )
@@ -108,7 +112,9 @@ class BalanceCalculator:
         summary = {}
         members = Member.objects.filter(group=self.group)
         for member in members:
-            summary[member.name] = {
+            summary[str(member.id)] = {
+                "name": member.name,
+                "phone": member.phone,
                 "paid": paid.get(member.id,Decimal("0")),
                 "share": shares.get(member.id,Decimal("0")),
                 "balance": balances.get(member.id,Decimal("0")) }

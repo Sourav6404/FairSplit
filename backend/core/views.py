@@ -50,6 +50,71 @@ class GroupViewSet(viewsets.ModelViewSet):
     ]
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        from django.db.models import Q
+        return Group.objects.filter(
+            Q(created_by=user) | Q(members__user=user)
+        ).distinct()
+
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        name = data.get("name")
+        members_data = data.get("members", [])
+
+        if not name:
+            return Response({"error": "Group name is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            group = Group.objects.create(
+                name=name,
+                created_by=request.user
+            )
+
+            # 1. Add the creator as a member of the group
+            creator_name = request.user.first_name or request.user.username
+            Member.objects.create(
+                group=group,
+                user=request.user,
+                name=creator_name,
+                phone=request.user.username
+            )
+
+            # 2. Add other members
+            from django.contrib.auth.models import User
+            for m in members_data:
+                member_name = m.get("name", "").strip()
+                member_phone = m.get("phone", "").strip()
+
+                if not member_name and not member_phone:
+                    continue
+
+                member_user = None
+                if member_phone:
+                    # Prevent adding the creator again
+                    if member_phone == request.user.username:
+                        continue
+                    member_user = User.objects.filter(username=member_phone).first()
+
+                if member_user and member_user == request.user:
+                    continue
+
+                if not member_name and member_user:
+                    member_name = member_user.first_name or member_user.username
+                elif not member_name:
+                    member_name = member_phone
+
+                Member.objects.create(
+                    group=group,
+                    user=member_user,
+                    name=member_name,
+                    phone=member_phone,
+                    is_guest=(member_user is None)
+                )
+
+            serializer = self.get_serializer(group)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
     @action(
         detail=True,
         methods=["get"]
@@ -175,6 +240,169 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         if group_id:
             queryset = queryset.filter(group_id=group_id)
         return queryset
+
+    @action(
+    detail=False,
+    methods=["post"]
+)
+    def bulk_import(self, request):
+        """
+        Creates a group with members and bulk-imports all expenses in one atomic transaction.
+        Payload:
+        {
+          "group_name": "Historical Import",
+          "members": [{"name": "Sourav", "phone": "9778470167"}, ...],
+          "expenses": [
+            {
+              "description": "Dinner",
+              "amount": 1500,
+              "expense_date": "2026-06-12",
+              "currency": "INR",
+              "paid_by_phone": "9778470167",
+              "split_type": "equal",
+              "participants_phones": ["9778470167", "9999999999"]
+            }, ...
+          ]
+        }
+        """
+        from django.contrib.auth.models import User as AuthUser
+        data = request.data
+        group_name = data.get("group_name", "Historical Import")
+        members_data = data.get("members", [])
+        expenses_data = data.get("expenses", [])
+
+        try:
+            with transaction.atomic():
+                # 1. Create the group
+                group = Group.objects.create(
+                    name=group_name,
+                    created_by=request.user
+                )
+
+                # 2. Build member maps: phone -> Member and name (lowercase) -> Member
+                phone_to_member = {}
+                name_to_member = {}
+                all_members = []   # track ALL members for default participant fallback
+
+                # Always add creator as a member
+                creator_phone = request.user.username
+                creator_name = request.user.first_name or request.user.username
+                creator_member = Member.objects.create(
+                    group=group,
+                    user=request.user,
+                    name=creator_name,
+                    phone=creator_phone
+                )
+                phone_to_member[creator_phone] = creator_member
+                name_to_member[creator_name.lower()] = creator_member
+                all_members.append(creator_member)
+
+                # Add other members
+                for m in members_data:
+                    m_phone = m.get("phone", "").strip()
+                    m_name = m.get("name", "").strip()
+                    if not m_phone and not m_name:
+                        continue
+                    if m_phone == creator_phone:
+                        continue
+                    if m_phone and m_phone in phone_to_member:
+                        continue
+
+                    linked_user = None
+                    if m_phone:
+                        linked_user = AuthUser.objects.filter(username=m_phone).first()
+
+                    if not m_name and linked_user:
+                        m_name = linked_user.first_name or linked_user.username
+                    elif not m_name:
+                        m_name = m_phone or "Unknown"
+
+                    member = Member.objects.create(
+                        group=group,
+                        user=linked_user,
+                        name=m_name,
+                        phone=m_phone if m_phone else None,
+                        is_guest=(linked_user is None)
+                    )
+                    if m_phone:
+                        phone_to_member[m_phone] = member
+                    name_to_member[m_name.lower()] = member
+                    all_members.append(member)
+
+                # 3. Create all expenses
+                created_count = 0
+                for exp in expenses_data:
+                    # Payer resolution: try phone → name → creator
+                    paid_by_phone = str(exp.get("paid_by_phone", "")).strip()
+                    paid_by_name = str(exp.get("paid_by_name", "")).strip().lower()
+
+                    payer_member = None
+                    if paid_by_phone and paid_by_phone in phone_to_member:
+                        payer_member = phone_to_member[paid_by_phone]
+                    elif paid_by_name and paid_by_name in name_to_member:
+                        payer_member = name_to_member[paid_by_name]
+                    else:
+                        payer_member = creator_member  # default to creator
+                    amount = Decimal(str(exp.get("amount", 0)))
+                    split_type = exp.get("split_type", "equal")
+                    participants_phones = exp.get("participants_phones", [])
+
+                    expense = Expense.objects.create(
+                        group=group,
+                        paid_by=payer_member,
+                        description=exp.get("description", "Imported Expense"),
+                        amount=amount,
+                        currency=exp.get("currency", "INR"),
+                        expense_date=exp.get("expense_date", "2026-01-01"),
+                        split_type=split_type if split_type in ["equal", "percentage", "exact"] else "equal"
+                    )
+
+                    participant_members = [
+                        phone_to_member[p] for p in participants_phones
+                        if p in phone_to_member
+                    ]
+                    if not participant_members:
+                        # No specific phones given → include ALL group members
+                        participant_members = list(all_members)
+
+                    if expense.split_type == "equal":
+                        share = amount / len(participant_members)
+                        for mem in participant_members:
+                            ExpenseParticipant.objects.create(
+                                expense=expense,
+                                member=mem,
+                                share_amount=share
+                            )
+                    elif expense.split_type == "exact":
+                        share_amounts = exp.get("share_amounts", {})
+                        for mem in participant_members:
+                            share = Decimal(str(share_amounts.get(mem.phone, amount / len(participant_members))))
+                            ExpenseParticipant.objects.create(
+                                expense=expense,
+                                member=mem,
+                                share_amount=share
+                            )
+                    else:
+                        share = amount / len(participant_members)
+                        for mem in participant_members:
+                            ExpenseParticipant.objects.create(
+                                expense=expense,
+                                member=mem,
+                                share_amount=share
+                            )
+
+                    created_count += 1
+
+                return Response({
+                    "message": f"Successfully imported {created_count} expenses into group '{group_name}'.",
+                    "group_id": group.id,
+                    "group_name": group_name,
+                    "member_count": len(phone_to_member),
+                    "expense_count": created_count
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(
     detail=False,
@@ -529,32 +757,33 @@ class DashboardViewSet(APIView):
         total_expenses = Expense.objects.count()
         total_settlements = Settlement.objects.count()
 
-        user_first_name = request.user.first_name
-        user_username = request.user.username
-        
         amount_to_get = Decimal("0")
         amount_you_owe = Decimal("0")
         personal_expense = Decimal("0")
-        
-        groups = Group.objects.all()
-        for group in groups:
+
+        # Only query groups the user belongs to (same filter as GroupViewSet)
+        from django.db.models import Q
+        user_groups = Group.objects.filter(
+            Q(created_by=request.user) | Q(members__user=request.user)
+        ).distinct()
+
+        for group in user_groups:
+            # Find the member record for this user in this group
+            user_member = group.members.filter(user=request.user).first()
+            if not user_member:
+                continue
+
             calculator = BalanceCalculator(group)
             summary = calculator.get_balance_summary()
-            
-            # Match member by first_name or username
-            member_summary = None
-            if user_first_name and user_first_name in summary:
-                member_summary = summary[user_first_name]
-            elif user_username in summary:
-                member_summary = summary[user_username]
-                
+
+            # summary is keyed by str(member.id) now
+            member_summary = summary.get(str(user_member.id))
             if member_summary:
                 bal = member_summary["balance"]
                 if bal > 0:
                     amount_to_get += bal
                 elif bal < 0:
                     amount_you_owe += abs(bal)
-                # "share" is the amount the user is responsible for (their personal expense)
                 personal_expense += member_summary.get("share", Decimal("0"))
 
         total_expense_amount = Expense.objects.aggregate(total=Sum("amount"))["total"] or 0
