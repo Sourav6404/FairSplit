@@ -145,36 +145,96 @@ export function ImportFlow() {
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
         const n1 = members[i];
-        const n2 = members[j];
-        const n1Parts = n1.trim().toLowerCase().split(/\s+/);
-        const n2Parts = n2.trim().toLowerCase().split(/\s+/);
-        if (
-          n1Parts[0] === n2Parts[0] &&
-          n1.toLowerCase() !== n2.toLowerCase()
-        ) {
+    // Helper to safely compare DD-MM-YYYY strings in JS Date
+    const parseDDMMYYYY = (dateStr: string): Date => {
+      const dparts = dateStr.split(/[-/]/);
+      if (dparts.length === 3) {
+        if (dparts[0].length === 4) {
+          return new Date(parseInt(dparts[0]), parseInt(dparts[1]) - 1, parseInt(dparts[2]));
+        }
+        return new Date(parseInt(dparts[2]), parseInt(dparts[1]) - 1, parseInt(dparts[0]));
+      }
+      return new Date(dateStr);
+    };
+
+    // 1. Gather all unique names mentioned in the CSV (payers + participants)
+    const csvNames = new Set<string>();
+    expenses.forEach(exp => {
+      if (exp.paid_by_name) csvNames.add(exp.paid_by_name.trim());
+      if (exp.participants_names) {
+        exp.participants_names.forEach(p => csvNames.add(p.trim()));
+      }
+    });
+
+    // 2. Identify similar names / Member Confusion between CSV names and group members
+    const flaggedSimilarNames = new Set<string>(); // lowercase names that are similar to a group member
+    const nameConfusionPairs = new Map<string, string>(); // csvNameLower -> groupMemberName
+
+    csvNames.forEach(csvName => {
+      const csvNameLower = csvName.toLowerCase();
+      if (memberSetLower.has(csvNameLower)) return; // Already a member
+
+      // Check if it's similar to any group member
+      const csvParts = csvNameLower.split(/\s+/);
+      for (const member of members) {
+        const memberLower = member.toLowerCase();
+        const memberParts = memberLower.split(/\s+/);
+        
+        // Match if first word is identical (e.g. "Priya" and "Priya S")
+        if (csvParts[0] === memberParts[0]) {
+          flaggedSimilarNames.add(csvNameLower);
+          nameConfusionPairs.set(csvNameLower, member);
+
           detected.push({
-            id: `ANOM-SIMILAR-${i}-${j}`,
+            id: `ANOM-SIMILAR-${member}-${csvName}`,
             type: "similar_names",
-            name: "Similar Member Names",
+            name: "Member Confusion",
             severity: "info",
             expenseName: "Member Matching Check",
-            details: `Detected similar names: '${n1}' and '${n2}'. Are they the same person?`,
+            details: `Detected name '${csvName}' in transactions which is very similar to group member '${member}'. Do they refer to the same person?`,
             resolved: false,
             decision: null,
-            data: { name1: n1, name2: n2 }
+            data: { name1: member, name2: csvName }
           });
+          break; // Stop checking other members for this name
         }
       }
+    });
+
+    // Check for multiple currencies across all expenses
+    const currencies = expenses.map(e => e.currency).filter(Boolean);
+    const uniqueCurrencies = Array.from(new Set(currencies));
+    if (uniqueCurrencies.length > 1) {
+      // Find the most common currency
+      const counts: Record<string, number> = {};
+      currencies.forEach(c => { counts[c] = (counts[c] || 0) + 1; });
+      const mainCurrency = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+      
+      expenses.forEach((exp, idx) => {
+        if (exp.currency && exp.currency !== mainCurrency) {
+          detected.push({
+            id: `ANOM-MULTICUR-${idx}`,
+            type: "multiple_currencies",
+            name: "Multiple Currencies",
+            severity: "info",
+            expenseName: exp.description,
+            details: `Expense uses currency '${exp.currency}' instead of the main currency '${mainCurrency}'.`,
+            resolved: false,
+            decision: null,
+            data: { currencies: uniqueCurrencies, ...exp }
+          });
+        }
+      });
     }
 
     // Simulated join/left dates for testing scope.md limits
     const leftDates: Record<string, string> = {
-      "aisha": "2026-02-25",
-      "meera": "2026-02-20"
+      "aisha": "25-02-2026",
+      "meera": "20-02-2026"
     };
     const joinDates: Record<string, string> = {
-      "dev": "2026-02-10",
-      "sam": "2026-02-10"
+      "dev": "10-02-2026",
+      "sam": "10-02-2026"
     };
 
     expenses.forEach((exp, idx) => {
@@ -302,19 +362,22 @@ export function ImportFlow() {
         });
       }
 
-      // 8. Unknown Guest Check
-      if (exp.paid_by_name && !memberSetLower.has(exp.paid_by_name.toLowerCase())) {
-        detected.push({
-          id: `ANOM-GUEST-${idx}`,
-          type: "unknown_guest",
-          name: "Unknown Guest",
-          severity: "warning",
-          expenseName: exp.description,
-          details: `Payer '${exp.paid_by_name}' is not in the confirmed group members list.`,
-          resolved: false,
-          decision: null,
-          data: { name: exp.paid_by_name, ...exp }
-        });
+      // 8. Unknown User (Guest) Check
+      if (exp.paid_by_name) {
+        const payerLower = exp.paid_by_name.trim().toLowerCase();
+        if (!memberSetLower.has(payerLower) && !flaggedSimilarNames.has(payerLower)) {
+          detected.push({
+            id: `ANOM-GUEST-${idx}`,
+            type: "unknown_guest",
+            name: "Unknown User",
+            severity: "warning",
+            expenseName: exp.description,
+            details: `Payer '${exp.paid_by_name}' is not in the confirmed group members list.`,
+            resolved: false,
+            decision: null,
+            data: { name: exp.paid_by_name, ...exp }
+          });
+        }
       }
 
       // 9. Invalid Percentage Check
@@ -402,78 +465,53 @@ export function ImportFlow() {
         });
       }
 
-      // 14. Ambiguous Date Check
-      const parts = rawDate.split(/[-/]/);
-      if (parts.length === 3) {
-        const p1 = parseInt(parts[0]);
-        const p2 = parseInt(parts[1]);
-        if (!isNaN(p1) && !isNaN(p2) && p1 <= 12 && p2 <= 12 && p1 !== p2) {
-          detected.push({
-            id: `ANOM-DATEAMB-${idx}`,
-            type: "ambiguous_date",
-            name: "Ambiguous Date Format",
-            severity: "warning",
-            expenseName: exp.description,
-            details: `Date '${rawDate}' is ambiguous (could be MM-DD-YYYY or DD-MM-YYYY).`,
-            resolved: false,
-            decision: null,
-            data: { original_date: rawDate, expense_date: exp.expense_date }
-          });
-        }
-      }
-
-      // Helper to safely compare DD-MM-YYYY strings in JS Date
-      const parseDDMMYYYY = (dateStr: string): Date => {
-        const dparts = dateStr.split(/[-/]/);
-        if (dparts.length === 3) {
-          if (dparts[0].length === 4) {
-            return new Date(parseInt(dparts[0]), parseInt(dparts[1]) - 1, parseInt(dparts[2]));
-          }
-          return new Date(parseInt(dparts[2]), parseInt(dparts[1]) - 1, parseInt(dparts[0]));
-        }
-        return new Date(dateStr);
-      };
-
       // 15. Member Left Group Check
       exp.participants_names.forEach(p => {
-        const leftLimit = leftDates[p.toLowerCase()];
-        if (leftLimit) {
-          const expMs = parseDDMMYYYY(exp.expense_date).getTime();
-          const leftMs = parseDDMMYYYY(leftLimit).getTime();
-          if (!isNaN(expMs) && !isNaN(leftMs) && expMs > leftMs) {
-            detected.push({
-              id: `ANOM-LEFT-${idx}-${p}`,
-              type: "member_left_group",
-              name: "Member Left Group",
-              severity: "warning",
-              expenseName: exp.description,
-              details: `Member '${p}' had left the group before this expense occurred.`,
-              resolved: false,
-              decision: null,
-              data: { name: p, leftDate: leftLimit, expenseDate: exp.expense_date }
-            });
+        const pLower = p.toLowerCase();
+        if (memberSetLower.has(pLower)) {
+          const leftLimit = leftDates[pLower];
+          if (leftLimit) {
+            const expMs = parseDDMMYYYY(exp.expense_date).getTime();
+            const leftMs = parseDDMMYYYY(leftLimit).getTime();
+            if (!isNaN(expMs) && !isNaN(leftMs) && expMs > leftMs) {
+              detected.push({
+                id: `ANOM-LEFT-${idx}-${p}`,
+                type: "member_left_group",
+                name: "Member Left Group",
+                severity: "warning",
+                expenseName: exp.description,
+                details: `Member '${p}' had left the group before this expense occurred.`,
+                resolved: false,
+                decision: null,
+                data: { name: p, leftDate: leftLimit, expenseDate: exp.expense_date }
+              });
+            }
           }
         }
       });
 
       // 16. Member Join Violation Check
       exp.participants_names.forEach(p => {
-        const joinLimit = joinDates[p.toLowerCase()];
-        if (joinLimit) {
-          const expMs = parseDDMMYYYY(exp.expense_date).getTime();
-          const joinMs = parseDDMMYYYY(joinLimit).getTime();
-          if (!isNaN(expMs) && !isNaN(joinMs) && expMs < joinMs) {
-            detected.push({
-              id: `ANOM-JOIN-${idx}-${p}`,
-              type: "member_join_violation",
-              name: "Member Join Violation",
-              severity: "warning",
-              expenseName: exp.description,
-              details: `Member '${p}' joined after this expense was incurred.`,
-              resolved: false,
-              decision: null,
-              data: { name: p, joinDate: joinLimit, expenseDate: exp.expense_date }
-            });
+        const pLower = p.toLowerCase();
+        // Skip check if the participant is considered a guest
+        if (memberSetLower.has(pLower)) {
+          const joinLimit = joinDates[pLower];
+          if (joinLimit) {
+            const expMs = parseDDMMYYYY(exp.expense_date).getTime();
+            const joinMs = parseDDMMYYYY(joinLimit).getTime();
+            if (!isNaN(expMs) && !isNaN(joinMs) && expMs < joinMs) {
+              detected.push({
+                id: `ANOM-JOIN-${idx}-${p}`,
+                type: "member_join_violation",
+                name: "Member Join Violation",
+                severity: "warning",
+                expenseName: exp.description,
+                details: `Member '${p}' joined after this expense was incurred.`,
+                resolved: false,
+                decision: null,
+                data: { name: p, joinDate: joinLimit, expenseDate: exp.expense_date }
+              });
+            }
           }
         }
       });
