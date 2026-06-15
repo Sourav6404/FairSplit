@@ -10,14 +10,31 @@ from .models import (
 )
 class GroupSerializer(serializers.ModelSerializer):
     members = serializers.SerializerMethodField()
+    balance = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
         fields = "__all__"
 
     def get_members(self, obj):
-        # We need to fetch the member details. We can just return basic member info or use MemberSerializer.
-        return [{"id": m.id, "name": m.name, "email": m.email} for m in obj.members.all()]
+        return [{"id": m.id, "name": m.name, "email": m.email, "user_id": m.user_id} for m in obj.members.all()]
+
+    def get_balance(self, obj):
+        try:
+            request = self.context.get('request')
+            if not request or not request.user or request.user.is_anonymous:
+                return 0
+            
+            member = obj.members.filter(user=request.user).first()
+            if not member:
+                return 0
+                
+            from .balance_calculator import BalanceCalculator
+            calculator = BalanceCalculator(obj)
+            balances = calculator.calculate_net_balance()
+            return float(balances.get(member.id, 0))
+        except Exception:
+            return 0
 class MemberSerializer(serializers.ModelSerializer):
 
     class Meta:
