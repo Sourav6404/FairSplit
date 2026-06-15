@@ -28,7 +28,6 @@ export function Expenses() {
         const expensesData = await apiFetch("/expenses/");
         setExpenses(expensesData);
 
-        // Fetch settlements for all groups in parallel to construct dynamic balance details
         const settlementsPromises = groupsData.map((g: any) =>
           apiFetch(`/groups/${g.id}/settlements/`).then((settlements: any[]) => ({
             groupName: g.name,
@@ -80,7 +79,6 @@ export function Expenses() {
     loadData();
   }, []);
 
-  // Chart data for past months expenses
   const expenseData = useMemo(() => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const chartData = Array.from({ length: 6 }).map((_, i) => {
@@ -143,7 +141,6 @@ export function Expenses() {
     return chartData.map(({ month, totalAmount, personalAmount }) => ({ month, totalAmount, personalAmount }));
   }, [currentUser, groups, expenses]);
 
-  // Helper to determine bar color based on amount (shades of green)
   const getBarColor = (amount: number) => {
     if (amount < 1000) return "#dcfce7"; // Very light green
     if (amount < 2000) return "#86efac"; // Light green
@@ -151,7 +148,6 @@ export function Expenses() {
     return "#114b30"; // Dark green
   };
 
-  // Sort expenses by amount descending (largest first)
   const sortedExpenses = useMemo(() => {
     return [...expensesList].sort((a, b) => b.amount - a.amount);
   }, [expensesList]);
@@ -167,7 +163,6 @@ export function Expenses() {
     );
   }
 
-  // If there are no expenses at all, we would show the empty state
   if (expensesList.length === 0) {
     return (
       <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -190,7 +185,6 @@ export function Expenses() {
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Expenses</h1>
       </div>
 
-      {/* Top Balances (No background color) */}
       <div className="flex flex-col md:flex-row gap-12 items-center justify-center py-6">
         <div className="flex flex-col items-center justify-center text-center">
           <p className="text-sm font-semibold text-gray-500 mb-2 tracking-wide uppercase">Amount to get</p>
@@ -214,7 +208,6 @@ export function Expenses() {
         </div>
 
         <TabsContent value="expenses" className="animate-in fade-in-50 duration-500">
-          {/* People List */}
           <div>
             <h3 className="font-bold text-gray-900 mb-4 text-lg border-b pb-2">People & Balances</h3>
             <div className="flex flex-col gap-3">
@@ -250,7 +243,6 @@ export function Expenses() {
         </TabsContent>
 
         <TabsContent value="summary" className="animate-in fade-in-50 duration-500">
-          {/* Expense Chart */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm mt-4">
             <h3 className="font-bold text-gray-900 mb-6">Past Months Expenses</h3>
             <div className="h-[250px] w-full">

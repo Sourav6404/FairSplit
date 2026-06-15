@@ -33,7 +33,6 @@ export function Dashboard() {
     fetchData();
   }, []);
 
-  // Chart data for past months expenses
   const expenseData = useMemo(() => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const chartData = Array.from({ length: 6 }).map((_, i) => {
@@ -96,7 +95,6 @@ export function Dashboard() {
     return chartData.map(({ month, totalAmount, personalAmount }) => ({ month, totalAmount, personalAmount }));
   }, [currentUser, groups, expenses]);
 
-  // Helper to determine bar color based on amount (shades of green)
   const getBarColor = (amount: number) => {
     if (amount < 1000) return "#dcfce7"; // Very light green
     if (amount < 2000) return "#86efac"; // Light green
@@ -153,9 +151,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Top Balances as styled cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Amount to get: Dark Green Card */}
         <div 
           onClick={() => navigate('/expenses')}
           className="bg-[#114b30] rounded-3xl p-6 text-white relative overflow-hidden shadow-lg shadow-[#114b30]/20 cursor-pointer hover:opacity-95 hover:scale-[1.02] transition-all"
@@ -170,7 +166,6 @@ export function Dashboard() {
           <div className="text-5xl font-bold mb-2">₹{stats.pending_balance ?? 0}</div>
         </div>
 
-        {/* Amount you owe: Light Card */}
         <div 
           onClick={() => navigate('/expenses')}
           className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm cursor-pointer hover:bg-gray-50 hover:scale-[1.02] transition-all"
@@ -185,7 +180,6 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Expense Chart */}
       <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
         <h3 className="font-bold text-gray-900 mb-6">Past Months Expenses</h3>
         <div className="h-[250px] w-full">
@@ -204,7 +198,6 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Groups List */}
       <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
         <h3 className="font-bold text-gray-900 mb-4">Your Groups</h3>
         <div className="space-y-3">

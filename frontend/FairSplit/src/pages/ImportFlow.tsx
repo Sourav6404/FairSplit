@@ -501,7 +501,6 @@ export function ImportFlow() {
         });
       }
 
-      // 14. Ambiguous Date Check (Only triggered when the month sequence flow is out of order)
       let isAmbiguous = false;
       const parts = rawDate.split(/[-/]/);
       if (parts.length === 3 && parts[0].length !== 4) {

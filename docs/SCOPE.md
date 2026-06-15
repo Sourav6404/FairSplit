@@ -61,9 +61,9 @@ This document defines the scope of anomalies handled by the FairSplit CSV import
 ---
 
 ## 9. Ambiguous Date
-- **Example**: Date format `04-05-2026`.
+- **Example**: An invoice date is written as `04-05-2026`. Without context, it is impossible to know whether the group spent money on April 5th or May 4th.
 - **Problem**: Ambiguity between April 5th and May 4th.
-- **Solution**: Infer the date format from neighboring records in the CSV or prompt the user for clarification.
+- **Solution**: Flagged as an anomaly only if the date is a candidate for ambiguity (day <= 12, month <= 12, and day != month) AND the month chronological sequence flow is out of order relative to neighboring records. The user can select the correct interpretation (swapping DD-MM-YYYY / MM-DD-YYYY) to resolve the anomaly.
 
 ---
 
@@ -134,3 +134,10 @@ This document defines the scope of anomalies handled by the FairSplit CSV import
 - **Example**: The sum of participant shares does not equal the total expense amount.
 - **Problem**: Unbalanced transaction total.
 - **Solution**: Run validation on import, flag discrepancies, and require user resolution to balance the split details.
+
+---
+
+## 20. Group Management (Deletion)
+- **Example**: After a weekend trip ends and everyone has settled their debts, the coordinator wants to delete the "Goa Villa Group" to clean up their active list.
+- **Problem**: Stale or completed groups cluttering the user interface and database.
+- **Solution**: Provide a secure delete option on the group details screen. When approved, it cascade deletes all member records, expense logs, split items, and settlements permanently from the database.

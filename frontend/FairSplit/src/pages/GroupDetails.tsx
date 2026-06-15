@@ -87,7 +87,6 @@ export function GroupDetails() {
   const totalOwedToYou = netBalance > 0 ? netBalance : 0;
   const totalYouOwe = netBalance < 0 ? Math.abs(netBalance) : 0;
 
-  // Build chart data for last 6 months
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const chartData = Array.from({ length: 6 }).map((_, i) => {
     const d = new Date();
@@ -176,7 +175,6 @@ export function GroupDetails() {
                 const myParticipant = exp.participants?.find((p: any) => p.member === activeMemberId);
                 const isPaidByMe = exp.paid_by === activeMemberId;
 
-                // Count participants who are NOT the payer (i.e. people the payer lent money to)
                 const othersParticipants = exp.participants?.filter((p: any) => p.member !== exp.paid_by) ?? [];
                 const othersShareTotal = othersParticipants.reduce((sum: number, p: any) => sum + Number(p.share_amount), 0);
 
