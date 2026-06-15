@@ -387,7 +387,7 @@ export function ImportFlow() {
 
       // 13. Invalid Date Format Check
       const rawDate = exp.raw_date || "";
-      const isStandardDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
+      const isStandardDate = /^\d{2}-\d{2}-\d{4}$/.test(rawDate);
       if (rawDate && !isStandardDate) {
         detected.push({
           id: `ANOM-DATEFMT-${idx}`,
@@ -395,7 +395,7 @@ export function ImportFlow() {
           name: "Invalid Date Format",
           severity: "info",
           expenseName: exp.description,
-          details: `Date format '${rawDate}' is non-standard. Normalized to YYYY-MM-DD.`,
+          details: `Date format '${rawDate}' is non-standard. Normalized to DD-MM-YYYY.`,
           resolved: false,
           decision: null,
           data: { original: rawDate, converted: exp.expense_date }
@@ -422,12 +422,24 @@ export function ImportFlow() {
         }
       }
 
+      // Helper to safely compare DD-MM-YYYY strings in JS Date
+      const parseDDMMYYYY = (dateStr: string): Date => {
+        const dparts = dateStr.split(/[-/]/);
+        if (dparts.length === 3) {
+          if (dparts[0].length === 4) {
+            return new Date(parseInt(dparts[0]), parseInt(dparts[1]) - 1, parseInt(dparts[2]));
+          }
+          return new Date(parseInt(dparts[2]), parseInt(dparts[1]) - 1, parseInt(dparts[0]));
+        }
+        return new Date(dateStr);
+      };
+
       // 15. Member Left Group Check
       exp.participants_names.forEach(p => {
         const leftLimit = leftDates[p.toLowerCase()];
         if (leftLimit) {
-          const expMs = new Date(exp.expense_date).getTime();
-          const leftMs = new Date(leftLimit).getTime();
+          const expMs = parseDDMMYYYY(exp.expense_date).getTime();
+          const leftMs = parseDDMMYYYY(leftLimit).getTime();
           if (!isNaN(expMs) && !isNaN(leftMs) && expMs > leftMs) {
             detected.push({
               id: `ANOM-LEFT-${idx}-${p}`,
@@ -448,8 +460,8 @@ export function ImportFlow() {
       exp.participants_names.forEach(p => {
         const joinLimit = joinDates[p.toLowerCase()];
         if (joinLimit) {
-          const expMs = new Date(exp.expense_date).getTime();
-          const joinMs = new Date(joinLimit).getTime();
+          const expMs = parseDDMMYYYY(exp.expense_date).getTime();
+          const joinMs = parseDDMMYYYY(joinLimit).getTime();
           if (!isNaN(expMs) && !isNaN(joinMs) && expMs < joinMs) {
             detected.push({
               id: `ANOM-JOIN-${idx}-${p}`,
@@ -526,14 +538,14 @@ export function ImportFlow() {
       const amtClean = parseFloat(rawAmt.replace(/[^0-9.-]/g, "")) || 0;
       
       const rawDate = row[dateIdx] || "";
-      let dateClean = new Date().toISOString().split("T")[0];
+      let dateClean = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
       if (rawDate) {
         const parts = rawDate.split(/[-/]/);
         if (parts.length === 3) {
           if (parts[0].length === 4) {
-            dateClean = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            dateClean = `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
           } else if (parts[2].length === 4) {
-            dateClean = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            dateClean = `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
           }
         }
       }
