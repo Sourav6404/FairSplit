@@ -35,237 +35,351 @@ interface Anomaly {
   data: any;
 }
 
+interface ParsedExpense {
+  description: string;
+  amount: number;
+  expense_date: string;
+  currency: string;
+  paid_by_name: string;
+  split_type: string;
+  participants_names: string[];
+  share_amounts: Record<string, number>;
+}
+
 export function ImportFlow() {
   const navigate = useNavigate();
   const [step, setStep] = useState<
-    "upload" | "detect-members" | "unknown-members" | "anomalies-dashboard" | "resolve-anomaly" | "final-review" | "success"
+    "upload" | "detect-members" | "anomalies-dashboard" | "resolve-anomaly" | "final-review" | "success"
   >("upload");
 
   const [fileName, setFileName] = useState<string>("");
+  const [groupName, setGroupName] = useState<string>("");
   const [fileUploaded, setFileUploaded] = useState<boolean>(false);
   const [importing, setImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [createdGroupId, setCreatedGroupId] = useState<number | null>(null);
-  const [groupMembers, setGroupMembers] = useState<string[]>(["Sourav", "Rahul", "Priya"]);
-  const [newMemberName, setNewMemberName] = useState<string>("");
-  
-  // Members extracted from the CSV
-  const [csvMembers] = useState<string[]>(["Sourav", "Rahul", "Priya", "Rohan"]);
-  // Unknown members = CSV members not in group
-  const [unknownMembers] = useState<string[]>(["Rohan"]);
-  const [unknownMemberActions, setUnknownMemberActions] = useState<Record<string, "guest" | "member" | "remove">>({
-    Rohan: "guest"
-  });
-
-  // Anomalies List (All 15 anomaly types)
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([
-    {
-      id: "ANOM-01",
-      type: "duplicate",
-      name: "Duplicate Expense",
-      severity: "critical",
-      expenseName: "Dinner",
-      details: "Dinner expense of ₹1500 appears twice in the file.",
-      resolved: false,
-      decision: null,
-      data: { desc: "Dinner", amount: 1500, date: "12-06-2026", payer: "Sourav" }
-    },
-    {
-      id: "ANOM-02",
-      type: "conflict",
-      name: "Conflicting Expense",
-      severity: "critical",
-      expenseName: "Dinner",
-      details: "Two Dinner records on 12-06-2026 with same participants but different amounts.",
-      resolved: false,
-      decision: null,
-      data: { desc: "Dinner", amountA: 1500, amountB: 1700, date: "12-06-2026" }
-    },
-    {
-      id: "ANOM-03",
-      type: "missing_payer",
-      name: "Missing Payer",
-      severity: "warning",
-      expenseName: "Taxi",
-      details: "Taxi expense of ₹500 is missing the payer details.",
-      resolved: false,
-      decision: null,
-      data: { desc: "Taxi", amount: 500, date: "13-06-2026" }
-    },
-    {
-      id: "ANOM-04",
-      type: "missing_currency",
-      name: "Missing Currency",
-      severity: "warning",
-      expenseName: "Hotel Booking",
-      details: "Hotel Booking of 15000 has no currency specified.",
-      resolved: false,
-      decision: null,
-      data: { desc: "Hotel Booking", amount: 15000, date: "14-06-2026" }
-    },
-    {
-      id: "ANOM-05",
-      type: "similar_names",
-      name: "Similar Names",
-      severity: "info",
-      expenseName: "Priya / Priya S",
-      details: "CSV contains Priya and Priya S which might refer to the same member.",
-      resolved: false,
-      decision: null,
-      data: { name1: "Priya", name2: "Priya S" }
-    },
-    {
-      id: "ANOM-06",
-      type: "unknown_guest",
-      name: "Unknown Participant",
-      severity: "info",
-      expenseName: "Rohan",
-      details: "Rohan is not part of this group.",
-      resolved: false,
-      decision: null,
-      data: { name: "Rohan" }
-    },
-    {
-      id: "ANOM-07",
-      type: "member_left_group",
-      name: "Member Left Group Violation",
-      severity: "warning",
-      expenseName: "Rahul left on 01-05-2026",
-      details: "Rahul participated in expense on 10-06-2026 after leaving the group.",
-      resolved: false,
-      decision: null,
-      data: { name: "Rahul", leftDate: "01-05-2026", expenseDate: "10-06-2026" }
-    },
-    {
-      id: "ANOM-08",
-      type: "member_join_violation",
-      name: "Member Join Violation",
-      severity: "warning",
-      expenseName: "Priya joined on 15-06-2026",
-      details: "Priya participated in expense on 12-06-2026 before joining the group.",
-      resolved: false,
-      decision: null,
-      data: { name: "Priya", joinDate: "15-06-2026", expenseDate: "12-06-2026" }
-    },
-    {
-      id: "ANOM-09",
-      type: "negative_amount",
-      name: "Negative Amount",
-      severity: "warning",
-      expenseName: "Cashback Return",
-      details: "Expense amount is negative (-500).",
-      resolved: false,
-      decision: null,
-      data: { desc: "Cashback Return", amount: -500 }
-    },
-    {
-      id: "ANOM-10",
-      type: "refund",
-      name: "Refund Detected",
-      severity: "info",
-      expenseName: "Refund cashback",
-      details: "Cashback description and negative amount detected.",
-      resolved: false,
-      decision: null,
-      data: { desc: "Cashback", amount: -500 }
-    },
-    {
-      id: "ANOM-11",
-      type: "settlement",
-      name: "Settlement Detected",
-      severity: "warning",
-      expenseName: "Paid Back Rahul",
-      details: "Expense description contains keywords indicating a settlement.",
-      resolved: false,
-      decision: null,
-      data: { desc: "Paid Back Rahul", amount: 1200 }
-    },
-    {
-      id: "ANOM-12",
-      type: "invalid_percentage",
-      name: "Invalid Percentage Split",
-      severity: "critical",
-      expenseName: "Rental split",
-      details: "Split percentages total 90% instead of 100%.",
-      resolved: false,
-      decision: null,
-      data: { totalPct: 90, breakdown: { Sourav: 40, Rahul: 50 } }
-    },
-    {
-      id: "ANOM-13",
-      type: "split_conflict",
-      name: "Split Type Conflict",
-      severity: "critical",
-      expenseName: "Tickets",
-      details: "Split exact amounts total ₹900, but expense amount is ₹1000.",
-      resolved: false,
-      decision: null,
-      data: { expenseAmt: 1000, splitAmt: 900 }
-    },
-    {
-      id: "ANOM-14",
-      type: "invalid_date_format",
-      name: "Invalid Date Format",
-      severity: "info",
-      expenseName: "Flight Ticket",
-      details: "Original date format '2026/06/12' will be converted to '12-06-2026'.",
-      resolved: false,
-      decision: null,
-      data: { original: "2026/06/12", converted: "12-06-2026" }
-    },
-    {
-      id: "ANOM-15",
-      type: "multiple_currencies",
-      name: "Multiple Currencies",
-      severity: "warning",
-      expenseName: "Foreign Expenses",
-      details: "Multiple currencies found (USD, INR, EUR).",
-      resolved: false,
-      decision: null,
-      data: { currencies: ["USD", "INR", "EUR"], major: "INR" }
-    }
-  ]);
-
+  const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [memberPhones, setMemberPhones] = useState<Record<string, string>>({});
+  const [parsedExpenses, setParsedExpenses] = useState<ParsedExpense[]>([]);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [activeAnomalyIdx, setActiveAnomalyIdx] = useState<number | null>(null);
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   // Resolution States (Form binding variables)
-  const [payerSelection, setPayerSelection] = useState<string>("Sourav");
+  const [payerSelection, setPayerSelection] = useState<string>("");
   const [currencySelection, setCurrencySelection] = useState<string>("INR");
-  const [percentageBreakdown, setPercentageBreakdown] = useState<Record<string, number>>({ Sourav: 40, Rahul: 50, Priya: 0 });
+  const [percentageBreakdown, setPercentageBreakdown] = useState<Record<string, number>>({});
   const [joinDateInput, setJoinDateInput] = useState<string>("12-06-2026");
+
+  useEffect(() => {
+    const fetchMe = async () => {
+      try {
+        const u = await apiFetch("/auth/me/");
+        setCurrentUser(u);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchMe();
+  }, []);
+
+  // Simple CSV Text Parser helper
+  const parseCSVText = (text: string): string[][] => {
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let inQuotes = false;
+    let currentToken = "";
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentToken += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(currentToken.trim());
+        currentToken = "";
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        row.push(currentToken.trim());
+        if (row.length > 1 || row[0] !== "") {
+          lines.push(row);
+        }
+        row = [];
+        currentToken = "";
+      } else {
+        currentToken += char;
+      }
+    }
+    if (currentToken || row.length > 0) {
+      row.push(currentToken.trim());
+      lines.push(row);
+    }
+    return lines;
+  };
+
+  const getColIdx = (headers: string[], names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex(h => h.includes(name));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  // Local Anomaly Scanner
+  const scanAnomalies = (expenses: ParsedExpense[], members: string[]) => {
+    const detected: Anomaly[] = [];
+    const seen = new Set<string>();
+
+    expenses.forEach((exp, idx) => {
+      // 1. Negative Amount
+      if (exp.amount < 0) {
+        detected.push({
+          id: `ANOM-NEG-${idx}`,
+          type: "negative_amount",
+          name: "Negative Amount",
+          severity: "warning",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' has a negative amount (${exp.amount}).`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+
+      // 2. Duplicate Check
+      const key = `${exp.description}-${exp.amount}-${exp.expense_date}-${exp.paid_by_name}`;
+      if (seen.has(key)) {
+        detected.push({
+          id: `ANOM-DUP-${idx}`,
+          type: "duplicate",
+          name: "Duplicate Expense",
+          severity: "critical",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' appears to be a duplicate.`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      } else {
+        seen.add(key);
+      }
+
+      // 3. Missing Payer
+      if (!exp.paid_by_name) {
+        detected.push({
+          id: `ANOM-PAY-${idx}`,
+          type: "missing_payer",
+          name: "Missing Payer",
+          severity: "critical",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' is missing the payer details.`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+
+      // 4. Missing Currency
+      if (!exp.currency) {
+        detected.push({
+          id: `ANOM-CUR-${idx}`,
+          type: "missing_currency",
+          name: "Missing Currency",
+          severity: "warning",
+          expenseName: exp.description,
+          details: `Expense '${exp.description}' has no currency specified.`,
+          resolved: false,
+          decision: null,
+          data: exp
+        });
+      }
+    });
+
+    return detected;
+  };
+
+  const processCSV = (text: string) => {
+    const lines = parseCSVText(text);
+    if (lines.length === 0) return;
+
+    const headers = lines[0].map(h => h.toLowerCase().trim());
+
+    const dateIdx = getColIdx(headers, ["date", "time"]);
+    const descIdx = getColIdx(headers, ["desc", "info", "item"]);
+    const paidByIdx = getColIdx(headers, ["paid_by", "paid by", "payer", "who paid"]);
+    const amountIdx = getColIdx(headers, ["amount", "cost", "price", "val"]);
+    const currencyIdx = getColIdx(headers, ["curr"]);
+    const splitTypeIdx = getColIdx(headers, ["split_type", "split type", "type"]);
+    const splitWithIdx = getColIdx(headers, ["split_with", "split with", "participants"]);
+    const splitDetailsIdx = getColIdx(headers, ["split_details", "split details", "shares", "percentages"]);
+
+    // Extract members only from the split_with column of the first data row (lines[1])
+    let detectedMembers: string[] = [];
+    if (lines.length > 1 && splitWithIdx !== -1) {
+      const firstRow = lines[1];
+      const splitWithVal = firstRow[splitWithIdx] || "";
+      detectedMembers = splitWithVal
+        .split(";")
+        .map(n => n.trim())
+        .filter(Boolean);
+    }
+
+    // Include active user automatically if they are not in the CSV members list
+    const activeUserName = currentUser?.first_name || currentUser?.username || "Sourav";
+    if (activeUserName && !detectedMembers.some(m => m.toLowerCase() === activeUserName.toLowerCase())) {
+      detectedMembers.push(activeUserName);
+    }
+
+    setGroupMembers(detectedMembers);
+
+    // Initial phones setup
+    const initialPhones: Record<string, string> = {};
+    detectedMembers.forEach(m => {
+      if (m.toLowerCase() === activeUserName.toLowerCase()) {
+        initialPhones[m] = currentUser?.username || "";
+      } else {
+        initialPhones[m] = "";
+      }
+    });
+    setMemberPhones(initialPhones);
+
+    // Parse expenses
+    const parsed: ParsedExpense[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const row = lines[i];
+      if (!row || row.length === 0 || !row[descIdx]) continue;
+
+      const desc = row[descIdx] || "Imported Expense";
+      const rawAmt = row[amountIdx] || "0";
+      const amtClean = parseFloat(rawAmt.replace(/[^0-9.-]/g, "")) || 0;
+      
+      const rawDate = row[dateIdx] || "";
+      let dateClean = new Date().toISOString().split("T")[0];
+      if (rawDate) {
+        const parts = rawDate.split(/[-/]/);
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            dateClean = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          } else if (parts[2].length === 4) {
+            dateClean = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+        }
+      }
+
+      const currency = row[currencyIdx] || "INR";
+      const paidByName = row[paidByIdx] || activeUserName;
+      
+      let splitType = "equal";
+      const rawSplitType = (row[splitTypeIdx] || "").toLowerCase();
+      if (rawSplitType.includes("percentage") || rawSplitType.includes("percent")) {
+        splitType = "percentage";
+      } else if (rawSplitType.includes("unequal") || rawSplitType.includes("exact") || rawSplitType.includes("share")) {
+        splitType = "exact";
+      }
+
+      const splitWithVal = row[splitWithIdx] || "";
+      const splitWithNames = splitWithVal
+        .split(";")
+        .map(n => n.trim())
+        .filter(Boolean);
+
+      const splitDetailsVal = splitDetailsIdx !== -1 ? (row[splitDetailsIdx] || "") : "";
+      const shareAmounts: Record<string, number> = {};
+      if (splitDetailsVal) {
+        const parts = splitDetailsVal.split(";");
+        for (const part of parts) {
+          const match = part.trim().match(/^(.+?)\s+([0-9.]+)$/);
+          if (match) {
+            const name = match[1].trim();
+            const val = parseFloat(match[2]);
+            shareAmounts[name] = val;
+          }
+        }
+      }
+
+      parsed.push({
+        description: desc,
+        amount: amtClean,
+        expense_date: dateClean,
+        currency: currency || "INR",
+        paid_by_name: paidByName,
+        split_type: splitType,
+        participants_names: splitWithNames,
+        share_amounts: shareAmounts
+      });
+    }
+
+    setParsedExpenses(parsed);
+
+    // Run anomaly scanner on parsed expenses
+    const scanned = scanAnomalies(parsed, detectedMembers);
+    setAnomalies(scanned);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFileName(e.target.files[0].name);
+      const file = e.target.files[0];
+      setFileName(file.name);
+      const baseName = file.name.replace(/\.[^/.]+$/, "");
+      setGroupName(baseName);
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        if (text) {
+          processCSV(text);
+        }
+      };
+      reader.readAsText(file);
       setFileUploaded(true);
     }
   };
 
-  const useSampleCSV = () => {
-    setFileName("expenses_with_anomalies.csv");
-    setFileUploaded(true);
-  };
+  // Static sample text representing the Excel file
+  const sampleCSVText = `date,description,paid_by,amount,currency,split_type,split_with,split_details,notes
+01-02-2026,February rent,Aisha,48000,INR,equal,Aisha;Rohan;Priya;Meera,,
+03-02-2026,Groceries,Priya,2340,INR,equal,Aisha;Rohan;Priya;Meera,,
+05-02-2026,Wifi bill,Rohan,1199,INR,equal,Aisha;Rohan;Priya;Meera,,
+08-02-2026,Dinner at Dev,Dev,3200,INR,equal,Aisha;Rohan;Priya;Dev,Aisha 1;Rohan 1;Dev 1,
+14-02-2026,Movie night,Priya,640,INR,equal,Aisha;Rohan;Priya,,
+15-02-2026,Cylinder,Rohan,,899.995,equal,Aisha;Rohan;Priya;Meera,,
+18-02-2026,Groceries,Priya S,1875,INR,equal,Aisha;Rohan;Priya;Meera,,
+20-02-2026,Aisha birthday,Rohan,1500,INR,exact,Rohan;Priya;Meera,Rohan 700;Priya 300;Meera 500,
+22-02-2026,House cleaning supplies,,-780,INR,equal,Aisha;Rohan;Priya;Meera,,
+28-02-2026,Pizza Friday,Aisha,1440,INR,percentage,Aisha;Rohan;Priya;Meera,Aisha 30%,`;
 
-  const handleResolveUnknownMember = (name: string, action: "guest" | "member" | "remove") => {
-    setUnknownMemberActions({
-      ...unknownMemberActions,
-      [name]: action
-    });
+  const useSampleCSV = () => {
+    setFileName("Expenses Export.csv");
+    setGroupName("Expenses Export");
+    processCSV(sampleCSVText);
+    setFileUploaded(true);
   };
 
   const openAnomalyResolve = (idx: number) => {
     setActiveAnomalyIdx(idx);
     const anomaly = anomalies[idx];
     
-    // Pre-populate input states based on the anomaly details
     if (anomaly.type === "missing_payer") {
-      setPayerSelection(groupMembers[0]);
+      setPayerSelection(groupMembers[0] || "");
     } else if (anomaly.type === "missing_currency") {
       setCurrencySelection("INR");
     } else if (anomaly.type === "member_join_violation") {
-      setJoinDateInput(anomaly.data.expenseDate);
+      setJoinDateInput(anomaly.data.expense_date);
     } else if (anomaly.type === "invalid_percentage") {
-      setPercentageBreakdown({ Sourav: 40, Rahul: 50, Priya: 10 });
+      const initialPct: Record<string, number> = {};
+      groupMembers.forEach(m => {
+        initialPct[m] = 0;
+      });
+      setPercentageBreakdown(initialPct);
     }
     
     setStep("resolve-anomaly");
@@ -273,28 +387,41 @@ export function ImportFlow() {
 
   const applyAnomalyResolution = (decisionText: string) => {
     if (activeAnomalyIdx === null) return;
-    const updated = [...anomalies];
-    updated[activeAnomalyIdx] = {
-      ...updated[activeAnomalyIdx],
+    const anomaly = anomalies[activeAnomalyIdx];
+
+    // Propagate fixes to parsedExpenses
+    const updatedExpenses = [...parsedExpenses];
+    const expIdx = parsedExpenses.findIndex(
+      e => e.description === anomaly.expenseName && e.amount === anomaly.data.amount
+    );
+
+    if (expIdx !== -1) {
+      if (anomaly.type === "missing_payer") {
+        updatedExpenses[expIdx].paid_by_name = payerSelection;
+      } else if (anomaly.type === "missing_currency") {
+        updatedExpenses[expIdx].currency = currencySelection;
+      } else if (anomaly.type === "negative_amount" && decisionText.toLowerCase().includes("positive")) {
+        updatedExpenses[expIdx].amount = Math.abs(updatedExpenses[expIdx].amount);
+      }
+    }
+
+    setParsedExpenses(updatedExpenses);
+
+    const updatedAnomalies = [...anomalies];
+    updatedAnomalies[activeAnomalyIdx] = {
+      ...updatedAnomalies[activeAnomalyIdx],
       resolved: true,
       decision: decisionText
     };
-    setAnomalies(updated);
+    setAnomalies(updatedAnomalies);
     setStep("anomalies-dashboard");
     setActiveAnomalyIdx(null);
-  };
-
-  const handleAddMissingMember = () => {
-    if (newMemberName.trim() && !groupMembers.includes(newMemberName.trim())) {
-      setGroupMembers([...groupMembers, newMemberName.trim()]);
-      setNewMemberName("");
-    }
   };
 
   const handleDownloadReport = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
       + "Date,Description,Amount,Paid By,Participants,Status\n"
-      + anomalies.map(a => `${a.data.date || '12-06-2026'},${a.expenseName},${Math.abs(a.data.amount || a.data.amountA || 1000)},${a.data.payer || 'Sourav'},"Sourav;Rahul;Priya",Resolved (${a.decision || 'Auto-adjusted'})`).join("\n");
+      + anomalies.map(a => `${a.data.expense_date || '12-06-2026'},${a.expenseName},${Math.abs(a.data.amount || 1000)},${a.data.paid_by_name || 'Sourav'},"${a.data.participants_names?.join(';') || 'Sourav'}",Resolved (${a.decision || 'Auto-adjusted'})`).join("\n");
     
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -312,32 +439,42 @@ export function ImportFlow() {
     setImporting(true);
     setImportError(null);
     try {
-      // Build the member list from groupMembers state (names only – phone optional)
-      // The logged-in user is always creator, so we just send additional members
+      const activeUserName = currentUser?.first_name || currentUser?.username || "Sourav";
+      
+      // Build the member list (other members) with their user-entered phone numbers
       const otherMembers = groupMembers
-        .filter(m => m !== "Sourav") // creator added automatically by backend
-        .map(m => ({ name: m, phone: "" }));
+        .filter(m => m.toLowerCase() !== activeUserName.toLowerCase())
+        .map(m => ({
+          name: m,
+          phone: memberPhones[m] || ""
+        }));
 
-      // Build the expense list reflecting the actual CSV with different payers.
-      // paid_by_name maps to the member name so the backend resolves correctly.
-      const today = new Date().toISOString().split("T")[0];
-      // The logged-in user's first name (creator) is used as first payer
-      const creatorName = groupMembers[0]; // e.g. "Sourav"
-      const expenses = [
-        { description: "Dinner",        amount: 1500,  expense_date: "2026-06-12", currency: "INR", paid_by_name: creatorName,       split_type: "equal", participants_phones: [] },
-        { description: "Hotel Booking", amount: 15000, expense_date: "2026-06-14", currency: "INR", paid_by_name: groupMembers[1] || creatorName, split_type: "equal", participants_phones: [] },
-        { description: "Taxi",          amount: 500,   expense_date: "2026-06-13", currency: "INR", paid_by_name: groupMembers[2] || creatorName, split_type: "equal", participants_phones: [] },
-        { description: "Flight Ticket", amount: 8000,  expense_date: "2026-06-12", currency: "INR", paid_by_name: creatorName,       split_type: "equal", participants_phones: [] },
-        { description: "Tickets",       amount: 1000,  expense_date: "2026-06-15", currency: "INR", paid_by_name: groupMembers[1] || creatorName, split_type: "equal", participants_phones: [] },
-        { description: "Rental split",  amount: 3600,  expense_date: today,        currency: "INR", paid_by_name: groupMembers[2] || creatorName, split_type: "equal", participants_phones: [] },
-      ];
+      const expensesPayload = parsedExpenses.map(exp => {
+        const paidByPhone = memberPhones[exp.paid_by_name] || "";
+        const participantsPhones = exp.participants_names
+          .map(name => memberPhones[name])
+          .filter(Boolean);
+
+        return {
+          description: exp.description,
+          amount: exp.amount,
+          expense_date: exp.expense_date,
+          currency: exp.currency,
+          paid_by_name: exp.paid_by_name,
+          paid_by_phone: paidByPhone,
+          split_type: exp.split_type,
+          participants_phones: participantsPhones,
+          participants_names: exp.participants_names,
+          share_amounts: exp.share_amounts
+        };
+      });
 
       const result = await apiFetch("/expenses/bulk_import/", {
         method: "POST",
         body: JSON.stringify({
-          group_name: `Historical Import - ${fileName || "CSV"}`,
+          group_name: groupName || `Historical Import - ${fileName || "CSV"}`,
           members: otherMembers,
-          expenses: expenses
+          expenses: expensesPayload
         })
       });
 
@@ -410,8 +547,18 @@ export function ImportFlow() {
             </div>
 
             {fileUploaded && (
-              <div className="mt-6 p-3 bg-green-50 text-[#114b30] text-sm font-semibold rounded-xl flex items-center gap-2 border border-green-200">
-                <Check size={16} /> Selected: {fileName}
+              <div className="mt-6 w-full max-w-sm space-y-2 text-left">
+                <Label htmlFor="group-name" className="font-semibold text-gray-850">Group Name</Label>
+                <Input
+                  id="group-name"
+                  placeholder="e.g. Goa Trip"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  className="bg-white rounded-xl"
+                />
+                <div className="mt-4 p-3 bg-green-50 text-[#114b30] text-xs font-semibold rounded-xl flex items-center gap-2 border border-green-200">
+                  <Check size={14} /> Selected File: {fileName}
+                </div>
               </div>
             )}
 
@@ -428,124 +575,61 @@ export function ImportFlow() {
         </Card>
       )}
 
-      {/* STEP 2: DETECT MEMBERS */}
+          {/* STEP 2: DETECT MEMBERS & PHONES */}
       {step === "detect-members" && (
         <Card className="rounded-3xl shadow-sm bg-white border border-gray-100">
           <CardHeader>
             <CardTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <UserPlus className="text-primary" /> Confirm Group Members
+              <UserPlus className="text-primary" /> Confirm Group Members & Phone Numbers
             </CardTitle>
             <CardDescription>
-              We extracted these participant names from the CSV file. Verify that they map correctly to your group members.
+              Verify the group members extracted from the first row of your CSV. You can add phone numbers to allow users to automatically view this group when they register.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             
             <div className="space-y-4">
-              <div className="text-sm font-semibold text-gray-500 tracking-wider">DETECTED PARTICIPANTS</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {csvMembers.map((m, idx) => (
-                  <div key={idx} className="flex items-center gap-2.5 bg-gray-50 border p-3 rounded-2xl shadow-sm">
-                    <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold text-[10px] border border-green-200">
-                      ✓
-                    </span>
-                    <span className="font-medium text-sm text-gray-800">{m}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+              <div className="text-sm font-semibold text-gray-500 tracking-wider">GROUP MEMBERS & PHONE NUMBERS</div>
+              <div className="space-y-3">
+                {groupMembers.map((member, idx) => {
+                  const activeUserName = currentUser?.first_name || currentUser?.username || "Sourav";
+                  const isCreator = member.toLowerCase() === activeUserName.toLowerCase();
+                  return (
+                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50 border p-4 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold text-[10px] border border-green-200">
+                          ✓
+                        </span>
+                        <div>
+                          <span className="font-bold text-sm text-gray-800">{member}</span>
+                          {isCreator && <span className="ml-2 text-xs bg-primary/10 text-primary font-semibold px-2.5 py-0.5 rounded-full">You (Creator)</span>}
+                        </div>
+                      </div>
 
-            <div className="bg-gray-50 border p-5 rounded-2xl space-y-3">
-              <Label htmlFor="new-member" className="font-semibold text-gray-800">Add Missing Member Manually</Label>
-              <div className="flex gap-3">
-                <Input 
-                  id="new-member" 
-                  placeholder="e.g. Rohan, Priya S" 
-                  value={newMemberName} 
-                  onChange={(e) => setNewMemberName(e.target.value)}
-                  className="bg-white rounded-xl"
-                />
-                <Button onClick={handleAddMissingMember} className="bg-primary text-white flex items-center gap-1">
-                  <PlusCircle size={16} /> Add
-                </Button>
+                      <div className="flex items-center gap-2 w-full sm:w-72">
+                        <Label htmlFor={`phone-${member}`} className="text-xs text-muted-foreground shrink-0">Phone:</Label>
+                        <Input
+                          id={`phone-${member}`}
+                          placeholder={isCreator ? (currentUser?.username || "Your number") : "Optional (e.g. 9876543210)"}
+                          value={memberPhones[member] || ""}
+                          disabled={isCreator}
+                          onChange={(e) => {
+                            setMemberPhones({
+                              ...memberPhones,
+                              [member]: e.target.value
+                            });
+                          }}
+                          className="bg-white rounded-xl h-9 text-xs"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-xs text-muted-foreground">Total Group Members Registered: {groupMembers.length}</p>
             </div>
 
             <div className="flex justify-between border-t pt-6">
               <Button variant="ghost" onClick={() => setStep("upload")} className="flex items-center gap-1">
-                <ArrowLeft size={16} /> Back
-              </Button>
-              <Button 
-                onClick={() => setStep("unknown-members")} 
-                className="bg-[#114b30] hover:bg-[#155436] text-white flex items-center gap-2 px-6 rounded-full"
-              >
-                Verify Unknown Members <ArrowRight size={16} />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* STEP 3: UNKNOWN MEMBERS DETECTED */}
-      {step === "unknown-members" && (
-        <Card className="rounded-3xl shadow-sm bg-white border border-gray-100">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <AlertTriangle className="text-amber-500" /> Unknown Members Detected
-            </CardTitle>
-            <CardDescription>
-              The following participants were found in the CSV but do not match any known group members. Choose how to handle them.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            
-            <div className="divide-y border rounded-2xl bg-white overflow-hidden shadow-sm">
-              {unknownMembers.map((name) => (
-                <div key={name} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <span className="font-bold text-gray-900 text-lg">{name}</span>
-                    <p className="text-xs text-muted-foreground mt-1">This user is included in the splits but has no profile.</p>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2.5">
-                    <button 
-                      onClick={() => handleResolveUnknownMember(name, "guest")}
-                      className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all ${
-                        unknownMemberActions[name] === "guest" 
-                          ? "bg-amber-50 border-amber-300 text-amber-700 shadow-sm" 
-                          : "bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
-                      }`}
-                    >
-                      Add as Guest
-                    </button>
-                    <button 
-                      onClick={() => handleResolveUnknownMember(name, "member")}
-                      className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all ${
-                        unknownMemberActions[name] === "member" 
-                          ? "bg-green-50 border-green-300 text-green-700 shadow-sm" 
-                          : "bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
-                      }`}
-                    >
-                      Add as Member
-                    </button>
-                    <button 
-                      onClick={() => handleResolveUnknownMember(name, "remove")}
-                      className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all ${
-                        unknownMemberActions[name] === "remove" 
-                          ? "bg-red-50 border-red-300 text-red-700 shadow-sm" 
-                          : "bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
-                      }`}
-                    >
-                      Remove from Expense
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between border-t pt-6">
-              <Button variant="ghost" onClick={() => setStep("detect-members")} className="flex items-center gap-1">
                 <ArrowLeft size={16} /> Back
               </Button>
               <Button 
@@ -631,7 +715,7 @@ export function ImportFlow() {
             </div>
 
             <div className="flex justify-between border-t p-6 bg-gray-50/50 rounded-b-3xl">
-              <Button variant="ghost" onClick={() => setStep("unknown-members")} className="flex items-center gap-1">
+              <Button variant="ghost" onClick={() => setStep("detect-members")} className="flex items-center gap-1">
                 <ArrowLeft size={16} /> Back
               </Button>
               <Button 
@@ -1095,15 +1179,15 @@ export function ImportFlow() {
             
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="bg-gray-50 border p-5 rounded-2xl shadow-sm">
-                <div className="text-3xl font-extrabold text-[#114b30]">120</div>
+                <div className="text-3xl font-extrabold text-[#114b30]">{parsedExpenses.length}</div>
                 <div className="text-xs font-semibold text-muted-foreground mt-1 uppercase tracking-wider">Expenses</div>
               </div>
               <div className="bg-gray-50 border p-5 rounded-2xl shadow-sm">
-                <div className="text-3xl font-extrabold text-amber-500">15</div>
+                <div className="text-3xl font-extrabold text-amber-500">{anomalies.length}</div>
                 <div className="text-xs font-semibold text-muted-foreground mt-1 uppercase tracking-wider">Anomalies</div>
               </div>
               <div className="bg-gray-50 border p-5 rounded-2xl shadow-sm">
-                <div className="text-3xl font-extrabold text-green-500">15</div>
+                <div className="text-3xl font-extrabold text-green-500">{totalResolved}</div>
                 <div className="text-xs font-semibold text-muted-foreground mt-1 uppercase tracking-wider">Resolved</div>
               </div>
             </div>
@@ -1114,7 +1198,7 @@ export function ImportFlow() {
               </div>
               <div>
                 <span className="font-bold text-green-800 text-base">Ready To Import</span>
-                <p className="text-sm text-green-700 mt-0.5">All 15 detected anomalies were successfully resolved with specific decisions.</p>
+                <p className="text-sm text-green-700 mt-0.5">All {anomalies.length} detected anomalies were successfully resolved with specific decisions.</p>
               </div>
             </div>
 
