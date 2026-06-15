@@ -68,6 +68,7 @@ export function Auth() {
           username: data.phoneNumber,
           email: `${data.phoneNumber}@fairsplit.com`,
           password: data.password,
+          first_name: data.name,
         }),
       });
       // After successful registration, log them in

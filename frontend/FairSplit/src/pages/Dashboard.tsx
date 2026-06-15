@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ pending_balance: 4250, total_expenses: 850 });
+  const [stats, setStats] = useState<any>({ pending_balance: 0, total_expenses_owed: 0 });
   const [groups, setGroups] = useState<any[]>([]);
 
   useEffect(() => {
@@ -26,13 +26,20 @@ export function Dashboard() {
   }, []);
 
   // Chart data for past months expenses
-  const expenseData = [
+  const expenseData = stats.personal_expense > 0 ? [
     { month: "Jan", amount: 1200 },
     { month: "Feb", amount: 2500 },
     { month: "Mar", amount: 800 },
     { month: "Apr", amount: 3500 },
     { month: "May", amount: 1500 },
     { month: "Jun", amount: 4200 },
+  ] : [
+    { month: "Jan", amount: 0 },
+    { month: "Feb", amount: 0 },
+    { month: "Mar", amount: 0 },
+    { month: "Apr", amount: 0 },
+    { month: "May", amount: 0 },
+    { month: "Jun", amount: 0 },
   ];
 
   // Helper to determine bar color based on amount (shades of green)
@@ -45,17 +52,13 @@ export function Dashboard() {
 
   // In a real app we'd map groupsData to this format using balance_summary endpoints
   // For now we map the raw backend group
-  const displayGroups = groups.length > 0 ? groups.map((g: any) => ({
+  const displayGroups = groups.map((g: any) => ({
     id: g.id,
     name: g.name,
     members: g.members?.length || 0,
-    balance: "Active", // Backend doesn't return balance per group in list API yet
+    balance: "Active",
     isOwed: null,
-  })) : [
-    { id: 1, name: "Goa Trip 🏖️", members: 4, balance: "+ ₹1,200", isOwed: true },
-    { id: 2, name: "Roommates 🏠", members: 3, balance: "- ₹450", isOwed: false },
-    { id: 3, name: "Office Lunch 🍔", members: 6, balance: "Settled up", isOwed: null },
-  ];
+  }));
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -95,7 +98,7 @@ export function Dashboard() {
               <ArrowUpRight size={14} className="text-white" />
             </button>
           </div>
-          <div className="text-5xl font-bold mb-2">₹{stats.pending_balance || 4250}</div>
+          <div className="text-5xl font-bold mb-2">₹{stats.pending_balance ?? 0}</div>
         </div>
 
         {/* Amount you owe: Light Card */}
@@ -109,7 +112,7 @@ export function Dashboard() {
               <ArrowUpRight size={14} className="text-gray-600" />
             </button>
           </div>
-          <div className="text-5xl font-bold text-gray-900 mb-2">₹{stats.total_expenses || 850}</div>
+          <div className="text-5xl font-bold mb-2">₹{stats.total_expenses_owed ?? 0}</div>
         </div>
       </div>
 
@@ -139,24 +142,30 @@ export function Dashboard() {
       <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
         <h3 className="font-bold text-gray-900 mb-4">Your Groups</h3>
         <div className="space-y-3">
-          {displayGroups.map((group) => (
-            <div key={group.id} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-green-100 hover:bg-green-50/30 transition-all cursor-pointer">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-[#114b30]/10 rounded-full flex items-center justify-center text-[#114b30]">
-                  <Users size={20} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900">{group.name}</h4>
-                  <p className="text-xs text-gray-500">{group.members} members</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className={`font-bold ${group.isOwed === true ? 'text-green-500' : group.isOwed === false ? 'text-red-500' : 'text-gray-400'}`}>
-                  {group.balance}
-                </p>
-              </div>
+          {displayGroups.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm font-medium">
+              No groups joined yet. Create one to get started!
             </div>
-          ))}
+          ) : (
+            displayGroups.map((group) => (
+              <div key={group.id} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-green-100 hover:bg-green-50/30 transition-all cursor-pointer">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-[#114b30]/10 rounded-full flex items-center justify-center text-[#114b30]">
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">{group.name}</h4>
+                    <p className="text-xs text-gray-500">{group.members} members</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`font-bold ${group.isOwed === true ? 'text-green-500' : group.isOwed === false ? 'text-red-500' : 'text-gray-400'}`}>
+                    {group.balance}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

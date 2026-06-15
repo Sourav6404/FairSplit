@@ -1,4 +1,6 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import { 
   LayoutDashboard, 
   CheckSquare, 
@@ -16,6 +18,20 @@ import { Input } from "@/components/ui/input";
 
 export function AppLayout() {
   const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const userData = await apiFetch("/auth/me/");
+        setUser(userData);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchUser();
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#f3f6f9] flex items-center justify-center p-4 font-sans">
       <div className="w-full max-w-[1400px] h-[90vh] bg-white rounded-[2rem] overflow-hidden flex shadow-sm border border-gray-100">
@@ -73,7 +89,7 @@ export function AppLayout() {
                   <img src="https://i.pravatar.cc/150?img=11" alt="User" className="w-full h-full object-cover" />
                 </div>
                 <div className="hidden md:block">
-                  <p className="text-sm font-semibold text-gray-900 leading-tight">Alex Den</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-tight">{user?.first_name || user?.username || "Guest"}</p>
                 </div>
               </div>
             </div>
