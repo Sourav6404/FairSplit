@@ -138,6 +138,57 @@ export function ImportFlow() {
   const scanAnomalies = (expenses: ParsedExpense[], members: string[]) => {
     const detected: Anomaly[] = [];
     const seen = new Set<string>();
+    const memberSetLower = new Set(members.map(m => m.toLowerCase()));
+
+    // Check for similar names among group members
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const n1 = members[i];
+        const n2 = members[j];
+        if (
+          n1.toLowerCase() !== n2.toLowerCase() &&
+          (n1.toLowerCase().includes(n2.toLowerCase()) || n2.toLowerCase().includes(n1.toLowerCase()))
+        ) {
+          detected.push({
+            id: `ANOM-SIMILAR-${i}-${j}`,
+            type: "similar_names",
+            name: "Similar Member Names",
+            severity: "info",
+            expenseName: "Member Matching Check",
+            details: `Detected similar names: '${n1}' and '${n2}'. Are they the same person?`,
+            resolved: false,
+            decision: null,
+            data: { name1: n1, name2: n2 }
+          });
+        }
+      }
+    }
+
+    // Check for multiple currencies across all expenses
+    const currencies = expenses.map(e => e.currency).filter(Boolean);
+    const uniqueCurrencies = Array.from(new Set(currencies));
+    if (uniqueCurrencies.length > 1) {
+      // Find the most common currency
+      const counts: Record<string, number> = {};
+      currencies.forEach(c => { counts[c] = (counts[c] || 0) + 1; });
+      const mainCurrency = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+      
+      expenses.forEach((exp, idx) => {
+        if (exp.currency && exp.currency !== mainCurrency) {
+          detected.push({
+            id: `ANOM-MULTICUR-${idx}`,
+            type: "multiple_currencies",
+            name: "Multiple Currencies",
+            severity: "info",
+            expenseName: exp.description,
+            details: `Expense uses currency '${exp.currency}' instead of the main currency '${mainCurrency}'.`,
+            resolved: false,
+            decision: null,
+            data: { currencies: uniqueCurrencies, ...exp }
+          });
+        }
+      });
+    }
 
     expenses.forEach((exp, idx) => {
       // 1. Negative Amount
@@ -201,6 +252,57 @@ export function ImportFlow() {
           decision: null,
           data: exp
         });
+      }
+
+      // 5. Unknown Guest Check
+      if (exp.paid_by_name && !memberSetLower.has(exp.paid_by_name.toLowerCase())) {
+        detected.push({
+          id: `ANOM-GUEST-${idx}`,
+          type: "unknown_guest",
+          name: "Unknown Guest",
+          severity: "warning",
+          expenseName: exp.description,
+          details: `Payer '${exp.paid_by_name}' is not in the confirmed group members list.`,
+          resolved: false,
+          decision: null,
+          data: { name: exp.paid_by_name, ...exp }
+        });
+      }
+
+      // 6. Invalid Percentage Check
+      if (exp.split_type === "percentage" && exp.share_amounts) {
+        const totalPct = Object.values(exp.share_amounts).reduce((a, b) => a + b, 0);
+        if (totalPct !== 100 && totalPct > 0) {
+          detected.push({
+            id: `ANOM-PCT-${idx}`,
+            type: "invalid_percentage",
+            name: "Invalid Percentage Split",
+            severity: "critical",
+            expenseName: exp.description,
+            details: `Percentage split sums to ${totalPct}% instead of 100%.`,
+            resolved: false,
+            decision: null,
+            data: { totalPct, ...exp }
+          });
+        }
+      }
+
+      // 7. Split Conflict Check
+      if (exp.split_type === "exact" && exp.share_amounts) {
+        const splitAmt = Object.values(exp.share_amounts).reduce((a, b) => a + b, 0);
+        if (Math.abs(splitAmt - exp.amount) > 0.01 && splitAmt > 0) {
+          detected.push({
+            id: `ANOM-SPLITCONFL-${idx}`,
+            type: "split_conflict",
+            name: "Split Amount Mismatch",
+            severity: "critical",
+            expenseName: exp.description,
+            details: `Sum of split details is ₹${splitAmt} but total expense amount is ₹${exp.amount}.`,
+            resolved: false,
+            decision: null,
+            data: { expenseAmt: exp.amount, splitAmt, ...exp }
+          });
+        }
       }
     });
 
