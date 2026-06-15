@@ -141,6 +141,15 @@ export function ImportFlow() {
     const seen = new Set<string>();
     const memberSetLower = new Set(members.map(m => m.toLowerCase()));
     const flaggedUnknownUsers = new Set<string>();
+    const stopWords = new Set(["at", "for", "the", "a", "an", "of", "in", "on", "with", "by", "to", "and", "or", "but", "is", "are", "was", "were", "from", "-"]);
+    const normalizeDescription = (desc: string): string => {
+      const words = desc.toLowerCase()
+        .replace(/[^\w\s]/g, " ")
+        .split(/\s+/)
+        .map(w => w.trim())
+        .filter(w => w.length > 0 && !stopWords.has(w));
+      return words.sort().join(" ");
+    };
 
     // Helper to safely compare DD-MM-YYYY strings in JS Date
     const parseDDMMYYYY = (dateStr: string): Date => {
@@ -285,7 +294,8 @@ export function ImportFlow() {
       }
 
       // 4. Duplicate Check
-      const key = `${exp.description.toLowerCase().trim()}-${exp.amount}-${exp.expense_date}-${(exp.paid_by_name || '').toLowerCase().trim()}`;
+      const normDesc = normalizeDescription(exp.description);
+      const key = `${normDesc}-${exp.amount}-${exp.expense_date}-${(exp.paid_by_name || '').toLowerCase().trim()}`;
       if (seen.has(key)) {
         detected.push({
           id: `ANOM-DUP-${idx}`,
@@ -305,8 +315,9 @@ export function ImportFlow() {
       // 5. Conflicting Duplicate Check
       for (let j = 0; j < idx; j++) {
         const other = expenses[j];
+        const otherNormDesc = normalizeDescription(other.description);
         if (
-          other.description.toLowerCase().trim() === exp.description.toLowerCase().trim() &&
+          otherNormDesc === normDesc &&
           other.expense_date === exp.expense_date &&
           [...other.participants_names].sort().join(";") === [...exp.participants_names].sort().join(";")
         ) {
