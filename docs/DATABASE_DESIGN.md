@@ -1,333 +1,173 @@
 # FairSplit Database Design
+
 ## Database Overview
-FairSplit is a group expense management platform that supports:
-* User Authentication
+FairSplit is a group expense management platform built using Django. The backend uses Django's ORM and connects to an underlying database (SQLite for development, PostgreSQL for production).
+
+The database structure supports:
+* User Authentication (built-in Django `User` model)
 * Group Management
-* Expense Tracking
+* Expense Tracking & Multi-currency conversion
 * Settlement Management
-* CSV Import
-* Anomaly Detection
-* Import Reports
-* AI-Assisted Analysis (Future)
+* CSV Import Session tracking
+* Import Anomalies & User Decisions tracking
+
 ---
+
 # Entity Relationship Diagram (ERD)
 
 ```mermaid
 erDiagram
-
     USER ||--o{ GROUP : creates
-
+    USER ||--o{ MEMBER : linked_to
+    USER ||--o{ IMPORT_SESSION : uploads
+    
     GROUP ||--o{ MEMBER : contains
-
-    USER ||--o{ CSV_IMPORT_JOB : uploads
-
     GROUP ||--o{ EXPENSE : has
-
     GROUP ||--o{ SETTLEMENT : has
 
-    GROUP ||--o{ CSV_IMPORT_JOB : imports
-
     MEMBER ||--o{ EXPENSE : pays
+    MEMBER ||--o{ EXPENSE_PARTICIPANT : splits
+    MEMBER ||--o{ SETTLEMENT : pays_repayment
+    MEMBER ||--o{ SETTLEMENT : receives_repayment
 
-    EXPENSE ||--o{ EXPENSE_PARTICIPANT : splits
+    EXPENSE ||--o{ EXPENSE_PARTICIPANT : splits_into
 
-    MEMBER ||--o{ EXPENSE_PARTICIPANT : participates
+    IMPORT_SESSION ||--o{ IMPORT_ANOMALY : detects
 
-    CSV_IMPORT_JOB ||--o{ IMPORT_EXPENSE_RECORD : stores
-
-    CSV_IMPORT_JOB ||--o{ IMPORT_ANOMALY : detects
-
-    CSV_IMPORT_JOB ||--|| IMPORT_REPORT : generates
-
-    MEMBER ||--o{ BALANCE_SNAPSHOT : owns
-
-    GROUP ||--o{ BALANCE_SNAPSHOT : calculates
-
-    MEMBER ||--o{ SETTLEMENT : payer
-
-    MEMBER ||--o{ SETTLEMENT : receiver
-
-
-
-    USER {
-        uuid id PK
-        string email
-        string mobile_number
-        string password_hash
-        string full_name
-    }
-
-    GROUP {
-        uuid id PK
-        string name
-        string description
-        string default_currency
-        uuid created_by FK
-    }
-
-    MEMBER {
-        uuid id PK
-        uuid group_id FK
-        uuid user_id FK
-        string name
-        date join_date
-        date leave_date
-        boolean is_guest
-    }
-
-    EXPENSE {
-        uuid id PK
-        uuid group_id FK
-        uuid paid_by FK
-        string description
-        decimal amount
-        string currency
-        date expense_date
-    }
-
-    EXPENSE_PARTICIPANT {
-        uuid id PK
-        uuid expense_id FK
-        uuid member_id FK
-        decimal share_amount
-        decimal share_percentage
-    }
-
-    SETTLEMENT {
-        uuid id PK
-        uuid group_id FK
-        uuid payer_id FK
-        uuid receiver_id FK
-        decimal amount
-        string currency
-        date settlement_date
-    }
-
-    BALANCE_SNAPSHOT {
-        uuid id PK
-        uuid group_id FK
-        uuid member_id FK
-        decimal owes
-        decimal gets_back
-    }
-
-    CSV_IMPORT_JOB {
-        uuid id PK
-        uuid group_id FK
-        uuid uploaded_by FK
-        string filename
-        string status
-    }
-
-    IMPORT_EXPENSE_RECORD {
-        uuid id PK
-        uuid import_job_id FK
-        json raw_data
-        json processed_data
-        boolean approved
-    }
-
-    IMPORT_ANOMALY {
-        uuid id PK
-        uuid import_job_id FK
-        string anomaly_type
-        string severity
-        json anomaly_data
-        string resolution_choice
-    }
-
-    IMPORT_REPORT {
-        uuid id PK
-        uuid import_job_id FK
-        int total_records
-        int total_anomalies
-        decimal anomaly_percentage
-        int critical_count
-        int warning_count
-        int info_count
-    }
+    IMPORT_ANOMALY ||--o{ ANOMALY_DECISION : records
 ```
-# Entity Relationship Overview
-User
-│
-├── Groups
-│
-├── Expenses
-│
-├── Settlements
-│
-└── CSV Import Jobs
+
 ---
-# User
-Stores registered users.
-| Field         | Type     | Constraints |
-| ------------- | -------- | ----------- |
-| id            | UUID     | PK          |
-| email         | String   | Unique      |
-| mobile_number | String   | Unique      |
-| password_hash | String   | Required    |
-| full_name     | String   | Required    |
-| profile_image | String   | Nullable    |
-| created_at    | DateTime | Auto        |
-| updated_at    | DateTime | Auto        |
+
+# Entity Schema Breakdown
+
+## 1. User (`auth_user`)
+Standard Django built-in user model.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `username` (string): Used for phone number / mobile identifier.
+  - `email` (string): User email address.
+  - `password` (string): Password hash.
+  - `first_name` (string): User first name.
+  - `last_name` (string): User last name.
+  - `is_active` (boolean): Whether the user is active.
+  - `date_joined` (datetime): Time of registration.
+
 ---
-# Group
-Expense sharing groups.
-| Field            | Type     | Constraints |
-| ---------------- | -------- | ----------- |
-| id               | UUID     | PK          |
-| name             | String   | Required    |
-| description      | Text     | Nullable    |
-| default_currency | String   | Required    |
-| created_by       | FK(User) | Required    |
-| created_at       | DateTime | Auto        |
+
+## 2. Group (`core_group`)
+Represents an expense sharing group.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `name` (string): Group name.
+  - `description` (text, nullable): Optional group description.
+  - `default_currency` (string): Default group currency (default `"INR"`).
+  - `created_by` (FK to User, nullable): User who created the group.
+  - `created_at` (datetime): Time when the group was created.
+
 ---
-# Member
-Members inside groups.
-| Field      | Type      | Constraints   |
-| ---------- | --------- | ------------- |
-| id         | UUID      | PK            |
-| group_id   | FK(Group) | Required      |
-| user_id    | FK(User)  | Nullable      |
-| name       | String    | Required      |
-| email      | String    | Nullable      |
-| phone      | String    | Nullable      |
-| join_date  | Date      | Required      |
-| leave_date | Date      | Nullable      |
-| is_guest   | Boolean   | Default False |
-| status     | String    | Active / Left |
+
+## 3. Member (`core_member`)
+Members participating in a group (can be registered users or guests).
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `group` (FK to Group): The group the member belongs to.
+  - `user` (FK to User, nullable): Linked registered user account.
+  - `name` (string): Name of the member in this group.
+  - `email` (email, nullable): Optional email address.
+  - `phone` (string, nullable): Optional phone number used to auto-link users.
+  - `join_date` (date, nullable): Optional date when they joined.
+  - `leave_date` (date, nullable): Optional date when they left.
+  - `is_guest` (boolean): True if they are a guest (no linked user account).
+
 ---
-# Expense
-Main expense table.
-| Field       | Type          | Constraints |
-| ----------- | ------------- | ----------- |
-| id          | UUID          | PK          |
-| group_id    | FK(Group)     | Required    |
-| description | String        | Required    |
-| amount      | Decimal(12,2) | Required    |
-| currency    | String        | Required    |
-| paid_by     | FK(Member)    | Required    |
-| date        | Date          | Required    |
-| category    | String        | Nullable    |
-| notes       | Text          | Nullable    |
-| created_at  | DateTime      | Auto        |
+
+## 4. Expense (`core_expense`)
+A shared group expense.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `group` (FK to Group): Group this expense belongs to.
+  - `paid_by` (FK to Member): Member who paid for the expense.
+  - `description` (string): Description of the expense.
+  - `amount` (decimal): Paid amount.
+  - `currency` (string): Currency of the paid amount (default `"INR"`).
+  - `expense_date` (date): Date of the expense.
+  - `split_type` (string): How the expense is divided (`"equal"`, `"percentage"`, `"exact"`).
+  - `original_amount` (decimal, nullable): Paid amount in the original currency (before conversion).
+  - `original_currency` (string, nullable): Original currency of foreign transaction.
+  - `base_currency` (string, nullable): Group's base currency converted to.
+  - `exchange_rate` (decimal, nullable): Currency exchange rate applied.
+  - `converted_amount` (decimal, nullable): Amount after currency conversion.
+  - `created_at` (datetime): Time the expense record was inserted.
+
 ---
-# ExpenseParticipant
-Stores who shares an expense.
-| Field            | Type          | Constraints |
-| ---------------- | ------------- | ----------- |
-| id               | UUID          | PK          |
-| expense_id       | FK(Expense)   | Required    |
-| member_id        | FK(Member)    | Required    |
-| share_amount     | Decimal(12,2) | Required    |
-| share_percentage | Decimal(5,2)  | Nullable    |
+
+## 5. ExpenseParticipant (`core_expenseparticipant`)
+Maps members to expenses with split shares.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `expense` (FK to Expense): Shared expense.
+  - `member` (FK to Member): Participant member.
+  - `share_amount` (decimal, nullable): Individual calculated share amount.
+  - `percentage` (decimal, nullable): Split percentage for the participant.
+
 ---
-# Settlement
-Money transfers between members.
-| Field           | Type          | Constraints |
-| --------------- | ------------- | ----------- |
-| id              | UUID          | PK          |
-| group_id        | FK(Group)     | Required    |
-| payer           | FK(Member)    | Required    |
-| receiver        | FK(Member)    | Required    |
-| amount          | Decimal(12,2) | Required    |
-| currency        | String        | Required    |
-| settlement_date | Date          | Required    |
-| notes           | Text          | Nullable    |
+
+## 6. Settlement (`core_settlement`)
+Money transfer records between members to pay back debts.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `group` (FK to Group): Associated group.
+  - `payer` (FK to Member): Member transferring money.
+  - `receiver` (FK to Member): Member receiving money.
+  - `amount` (decimal): Settlement amount.
+  - `currency` (string): Settlement currency (default `"INR"`).
+  - `settlement_date` (date): Date of the transfer.
+  - `notes` (text, nullable): Optional transfer comments.
+  - `created_at` (datetime): Log insertion timestamp.
+
 ---
-# BalanceSnapshot
-Stores calculated balances.
-| Field         | Type          | Constraints |
-| ------------- | ------------- | ----------- |
-| id            | UUID          | PK          |
-| group_id      | FK(Group)     | Required    |
-| member_id     | FK(Member)    | Required    |
-| owes          | Decimal(12,2) | Default 0   |
-| gets_back     | Decimal(12,2) | Default 0   |
-| calculated_at | DateTime      | Auto        |
+
+## 7. ImportSession (`core_importsession`)
+Tracks a CSV file upload/import batch.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `imported_by` (FK to User): The user who uploaded the CSV.
+  - `file_name` (string): Name of the imported file.
+  - `total_rows` (int): Total rows parsed from the CSV.
+  - `anomaly_count` (int): Number of anomalies found in this session.
+  - `imported_rows` (int): Number of successfully imported expense rows.
+  - `status` (string): Import status (`"PENDING"`, `"PROCESSING"`, `"WAITING_FOR_REVIEW"`, `"COMPLETED"`, `"FAILED"`).
+  - `created_at` (datetime): Import session start time.
+
 ---
-# CSVImportJob
-Tracks uploaded CSV files.
-| Field       | Type      | Constraints                     |
-| ----------- | --------- | ------------------------------- |
-| id          | UUID      | PK                              |
-| group_id    | FK(Group) | Required                        |
-| uploaded_by | FK(User)  | Required                        |
-| filename    | String    | Required                        |
-| status      | String    | Processing / Completed / Failed |
-| uploaded_at | DateTime  | Auto                            |
+
+## 8. ImportAnomaly (`core_importanomaly`)
+Anomalies flagged during a CSV import session.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `import_session` (FK to ImportSession): Linked import session.
+  - `anomaly_type` (string): Code for anomaly type (e.g. `"ANOMALY_MISSING_PAYER"`).
+  - `severity` (string): Anomaly severity level (e.g. `"CRITICAL"`, `"MEDIUM"`, `"LOW"`).
+  - `anomaly_data` (json): Contextual JSON details of the anomaly.
+  - `resolved` (boolean): Flag indicating if the anomaly has been resolved.
+  - `created_at` (datetime): Flagged timestamp.
+
 ---
-# ImportExpenseRecord
-Stores temporary imported rows before approval.
-| Field          | Type             | Constraints   |
-| -------------- | ---------------- | ------------- |
-| id             | UUID             | PK            |
-| import_job_id  | FK(CSVImportJob) | Required      |
-| raw_data       | JSON             | Required      |
-| processed_data | JSON             | Nullable      |
-| approved       | Boolean          | Default False |
+
+## 9. AnomalyDecision (`core_anomalydecision`)
+Records choices made by the user to resolve import anomalies.
+* **Fields**:
+  - `id` (int, PK): Auto-incremented primary key.
+  - `import_anomaly` (FK to ImportAnomaly): The resolved anomaly.
+  - `selected_option` (string): Option selected by the user (e.g. `"Accept Conversion"`).
+  - `original_value` (json, nullable): Original raw value prior to resolution.
+  - `final_value` (json, nullable): Final corrected/adjusted value.
+  - `created_at` (datetime): Time of resolution choice.
+
 ---
-# ImportAnomaly
-Stores detected anomalies.
-| Field             | Type             | Constraints               |
-| ----------------- | ---------------- | ------------------------- |
-| id                | UUID             | PK                        |
-| import_job_id     | FK(CSVImportJob) | Required                  |
-| anomaly_type      | String           | Required                  |
-| severity          | String           | Critical / Warning / Info |
-| anomaly_data      | JSON             | Required                  |
-| resolution_choice | String           | Nullable                  |
-| resolved          | Boolean          | Default False             |
----
-# ImportReport
-Stores generated reports.
-| Field              | Type             | Constraints |
-| ------------------ | ---------------- | ----------- |
-| id                 | UUID             | PK          |
-| import_job_id      | FK(CSVImportJob) | Required    |
-| total_records      | Integer          | Required    |
-| total_anomalies    | Integer          | Required    |
-| anomaly_percentage | Decimal(5,2)     | Required    |
-| critical_count     | Integer          | Required    |
-| warning_count      | Integer          | Required    |
-| info_count         | Integer          | Required    |
-| report_json        | JSON             | Required    |
----
-# Future AIAnalysis
-Reserved for AI insights.
-| Field         | Type      | Constraints |
-| ------------- | --------- | ----------- |
-| id            | UUID      | PK          |
-| group_id      | FK(Group) | Required    |
-| analysis_type | String    | Required    |
-| result_json   | JSON      | Required    |
-| created_at    | DateTime  | Auto        |
----
-# Relationships
-User
-→ Groups
-Group
-→ Members
-Group
-→ Expenses
-Group
-→ Settlements
-Expense
-→ ExpenseParticipants
-CSVImportJob
-→ ImportExpenseRecord
-CSVImportJob
-→ ImportAnomaly
-CSVImportJob
-→ ImportReport
----
+
 # Database Choice
-Development:
-* SQLite
-Production:
-* PostgreSQL
-Reason:
-* JSON support
-* Better indexing
-* Better scalability
-* Transaction safety
+* **Development**: SQLite (packaged, file-based, zero setup required).
+* **Production**: PostgreSQL.
+  - **Reason**: Excellent support for JSON data querying (`anomaly_data`, `original_value`, `final_value`), strict constraints, relational integrity, and transaction safety.

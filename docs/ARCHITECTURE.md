@@ -608,17 +608,15 @@ PostgreSQL
 
 # Database Entities
 
-- User
+- User (django.contrib.auth.models.User)
 - Group
 - Member
 - Expense
 - ExpenseParticipant
 - Settlement
-- Guest
-- ImportJob
+- ImportSession
 - ImportAnomaly
-- ImportReport
-- ActivityLog
+- AnomalyDecision
 
 ---
 
