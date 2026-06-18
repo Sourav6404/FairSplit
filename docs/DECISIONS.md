@@ -91,12 +91,13 @@ This document outlines the architectural decisions and resolution strategies imp
 ---
 
 ## 10. Ambiguous Dates
-* **Decision**: Safely resolve dates written in ambiguous formats (e.g., `04/05/2026`) based on chronological sequence flow.
+* **Decision**: Detect and resolve ambiguous dates (e.g., `04-05-2026`) by checking if the chronological month sequence is out of order.
 * **Action**:
   - Check if the date is a candidate for ambiguity (day <= 12, month <= 12, and day != month).
-  - Verify if the month chronological sequence flow is out of order compared to neighboring records.
-  - Flag matches for manual selection between DD-MM-YYYY and MM-DD-YYYY.
-* **Rationale**: Ambiguous dates should only be flagged if they break the chronological flow of transactions, avoiding unnecessary alerts on ordered dates.
+  - Analyze the chronological flow of months across neighboring records (e.g., if the sequence of months should be 3, 4, 5, but it shows up as 3, 5, 4, the record with month 5 is flagged).
+  - Raise a flag on the out-of-order record and ask the user to review and confirm the format (swapping DD-MM-YYYY and MM-DD-YYYY).
+* **Rationale**: If the chronological flow of months is disrupted, it strongly indicates that a date was written in an alternative format, whereas keeping the expected sequence suggests it was interpreted correctly.
+
 
 ---
 
