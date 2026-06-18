@@ -70,7 +70,7 @@ This document defines the scope of anomalies handled by the FairSplit CSV import
 ## 10. Invalid Date Format
 - **Example**: Date listed as `Mar-14` or `15/06/26`.
 - **Problem**: Non-ISO date formats causing database insertion errors.
-- **Solution**: Normalize date formats dynamically to the standard `YYYY-MM-DD` representation.
+- **Solution**: Normalize date formats dynamically to the standard `DD-MM-YYYY` representation.
 
 ---
 
@@ -98,7 +98,7 @@ This document defines the scope of anomalies handled by the FairSplit CSV import
 ## 14. Percentage Split Validation
 - **Example**: Splits designated as `40%`, `30%`, and `40%` for three participants.
 - **Problem**: Split percentages do not sum to 100%, causing unbalanced splits.
-- **Solution**: Perform pre-import validation and reject or flag records with invalid split totals.
+- **Solution**: Perform pre-import validation and reject or flag records with invalid split totals,user can input the split ratio.
 
 ---
 
